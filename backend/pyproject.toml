@@ -16,23 +16,11 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
-    "pytest-asyncio>=0.23",
-    "respx>=0.21",
     "ruff>=0.5",
 ]
 
 [tool.uv]
 package = false
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
-testpaths = ["tests"]
-markers = [
-    "live: hits real external APIs (deselected by default; run with `-m live`)",
-]
-addopts = "-m 'not live'"
 
 [tool.ruff]
 line-length = 100
@@ -40,6 +28,3 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
-
-[tool.ruff.lint.per-file-ignores]
-"tests/fixtures/*" = ["E501"]
