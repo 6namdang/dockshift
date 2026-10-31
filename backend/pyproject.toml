@@ -12,6 +12,9 @@ dependencies = [
     "pydantic-settings>=2.3",
     "mcp>=2.0",
     "defusedxml>=0.7",
+    "rdkit>=2026.9.1",
+    "xgboost>=3.2.0",
+    "numpy>=2.4.6",
 ]
 
 [dependency-groups]

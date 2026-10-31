@@ -14,10 +14,12 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, literature
+from app.api.routes import health, literature, qsar
 from app.config import get_settings
-from app.literature import literature_service
+from app.literature import LiteratureSearchService
+from app.literature.http import build_http_client
 from app.mcp_server import mcp
+from app.qsar import QsarService
 
 
 def create_app() -> FastAPI:
@@ -29,11 +31,12 @@ def create_app() -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with literature_service(settings) as service, mcp.session_manager.run():
-            app.state.literature_service = service
+        async with build_http_client(settings) as client, mcp.session_manager.run():
+            app.state.literature_service = LiteratureSearchService(client, settings)
+            app.state.qsar_service = QsarService(client, settings)
             yield
 
-    app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -45,6 +48,7 @@ def create_app() -> FastAPI:
 
     api = APIRouter(prefix="/api/v1")
     api.include_router(literature.router)
+    api.include_router(qsar.router)
     app.include_router(health.router)
     app.include_router(api)
 

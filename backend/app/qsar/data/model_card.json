@@ -1,0 +1,253 @@
+{
+  "target": "hTERT telomerase (ChEMBL target CHEMBL2916)",
+  "endpoint": "pIC50 (-log10 of IC50 in molar)",
+  "algorithm": "XGBoost regressor",
+  "hyperparameters": {
+    "subsample": 0.9,
+    "reg_lambda": 1,
+    "reg_alpha": 0.1,
+    "n_estimators": 100,
+    "min_child_weight": 1,
+    "max_depth": 7,
+    "learning_rate": 0.05,
+    "colsample_bytree": 0.6
+  },
+  "features": {
+    "total": 2243,
+    "morgan_fingerprint_bits": 2048,
+    "morgan_radius": 2,
+    "rdkit_descriptors": 195,
+    "note": "Descriptors are selected by name, so the local RDKit version may hold a different total as long as these names exist."
+  },
+  "training_data": {
+    "source": "ChEMBL (target CHEMBL2916), IC50 records with standard_relation '='",
+    "compounds": 616,
+    "pic50_min": 4.03,
+    "pic50_max": 8.34,
+    "pic50_mean": 5.48,
+    "pic50_sd": 0.84,
+    "pic50_median": 5.39,
+    "train_compounds": 492,
+    "test_compounds": 124,
+    "split": "80/20, random_state=42"
+  },
+  "performance": {
+    "paper_nested_cv_r2": "0.508 +/- 0.070",
+    "paper_heldout_r2": 0.533,
+    "paper_heldout_rmse": 0.507,
+    "paper_heldout_mae": 0.407,
+    "paper_y_scrambling_p": 0.02,
+    "reproduction_heldout_r2": 0.546,
+    "reproduction_y_scrambling_p": 0.0,
+    "interpretation": "R2 around 0.53 means roughly half the variance in potency is explained; predictions carry an error of about 0.5 log units and should be treated as rough triage, not measurement."
+  },
+  "applicability_domain": {
+    "metric": "Maximum Tanimoto similarity (Morgan r=2, 2048 bits) to any training compound",
+    "threshold": 0.272,
+    "rule": "5th percentile of the training set's leave-one-out max-similarity distribution",
+    "note": "Predictions for compounds below the threshold are extrapolation and unreliable."
+  },
+  "benchmark": [
+    {
+      "algorithm": "RandomForest",
+      "features": "Union",
+      "cv_r2_mean": 0.533,
+      "cv_r2_std": 0.08
+    },
+    {
+      "algorithm": "RandomForest",
+      "features": "Descriptor",
+      "cv_r2_mean": 0.515,
+      "cv_r2_std": 0.077
+    },
+    {
+      "algorithm": "LightGBM",
+      "features": "Union",
+      "cv_r2_mean": 0.514,
+      "cv_r2_std": 0.081
+    },
+    {
+      "algorithm": "XGBoost",
+      "features": "Union",
+      "cv_r2_mean": 0.506,
+      "cv_r2_std": 0.083
+    },
+    {
+      "algorithm": "LightGBM",
+      "features": "Descriptor",
+      "cv_r2_mean": 0.495,
+      "cv_r2_std": 0.076
+    },
+    {
+      "algorithm": "SVR",
+      "features": "Union",
+      "cv_r2_mean": 0.476,
+      "cv_r2_std": 0.067
+    },
+    {
+      "algorithm": "XGBoost",
+      "features": "Descriptor",
+      "cv_r2_mean": 0.475,
+      "cv_r2_std": 0.096
+    },
+    {
+      "algorithm": "SVR",
+      "features": "Fingerprint",
+      "cv_r2_mean": 0.473,
+      "cv_r2_std": 0.064
+    },
+    {
+      "algorithm": "RandomForest",
+      "features": "Fingerprint",
+      "cv_r2_mean": 0.471,
+      "cv_r2_std": 0.078
+    },
+    {
+      "algorithm": "SVR",
+      "features": "Descriptor",
+      "cv_r2_mean": 0.464,
+      "cv_r2_std": 0.084
+    },
+    {
+      "algorithm": "LightGBM",
+      "features": "Fingerprint",
+      "cv_r2_mean": 0.462,
+      "cv_r2_std": 0.097
+    },
+    {
+      "algorithm": "XGBoost",
+      "features": "Fingerprint",
+      "cv_r2_mean": 0.423,
+      "cv_r2_std": 0.088
+    },
+    {
+      "algorithm": "MLP",
+      "features": "Descriptor",
+      "cv_r2_mean": 0.108,
+      "cv_r2_std": 0.232
+    },
+    {
+      "algorithm": "MLP",
+      "features": "Fingerprint",
+      "cv_r2_mean": -4.103,
+      "cv_r2_std": 1.334
+    },
+    {
+      "algorithm": "MLP",
+      "features": "Union",
+      "cv_r2_mean": -5.484,
+      "cv_r2_std": 1.815
+    }
+  ],
+  "top_feature_importances": [
+    {
+      "feature": "PEOE_VSA12",
+      "importance": 0.02856
+    },
+    {
+      "feature": "SlogP_VSA10",
+      "importance": 0.02126
+    },
+    {
+      "feature": "FP_1733",
+      "importance": 0.01382
+    },
+    {
+      "feature": "FP_1098",
+      "importance": 0.0138
+    },
+    {
+      "feature": "FP_1179",
+      "importance": 0.01362
+    },
+    {
+      "feature": "SlogP_VSA5",
+      "importance": 0.01318
+    },
+    {
+      "feature": "SMR_VSA7",
+      "importance": 0.01271
+    },
+    {
+      "feature": "SMR_VSA3",
+      "importance": 0.01085
+    },
+    {
+      "feature": "HallKierAlpha",
+      "importance": 0.00946
+    },
+    {
+      "feature": "MinAbsEStateIndex",
+      "importance": 0.00825
+    },
+    {
+      "feature": "VSA_EState7",
+      "importance": 0.0081
+    },
+    {
+      "feature": "EState_VSA5",
+      "importance": 0.00802
+    },
+    {
+      "feature": "BertzCT",
+      "importance": 0.00771
+    },
+    {
+      "feature": "PEOE_VSA8",
+      "importance": 0.00718
+    },
+    {
+      "feature": "FpDensityMorgan3",
+      "importance": 0.00716
+    },
+    {
+      "feature": "MolLogP",
+      "importance": 0.00691
+    },
+    {
+      "feature": "FpDensityMorgan1",
+      "importance": 0.00681
+    },
+    {
+      "feature": "FP_922",
+      "importance": 0.00654
+    },
+    {
+      "feature": "EState_VSA8",
+      "importance": 0.0064
+    },
+    {
+      "feature": "FP_539",
+      "importance": 0.00568
+    },
+    {
+      "feature": "FP_1449",
+      "importance": 0.00471
+    },
+    {
+      "feature": "VSA_EState4",
+      "importance": 0.00463
+    },
+    {
+      "feature": "PEOE_VSA3",
+      "importance": 0.00463
+    },
+    {
+      "feature": "SlogP_VSA8",
+      "importance": 0.00454
+    },
+    {
+      "feature": "fr_benzene",
+      "importance": 0.00402
+    }
+  ],
+  "caveats": [
+    "The paper's final model is XGBoost, but on this reproduction's feature set RandomForest scored slightly higher in cross-validation (0.533 vs 0.506); held-out performance is comparable.",
+    "The curated dataset holds structures and pIC50 only; compound names and ChEMBL IDs are dropped during curation, so known compounds are found by structure.",
+    "Predicted values are modelled estimates, never experimental measurements."
+  ],
+  "citation": "Iraqui, A. & Dang, H. N. (2026). A Machine Learning QSAR Model for Predicting hTERT Telomerase Inhibitor Potency. ChemRxiv.",
+  "doi": "10.26434/chemrxiv.15005669/v2",
+  "source_repository": "https://github.com/AleenaI20/htert-qsar-xgboost",
+  "license": "MIT"
+}
