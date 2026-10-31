@@ -95,13 +95,10 @@ app/
     http.py            shared httpx client + retries
     text.py            HTML/JATS → plain text
     sources/           pubmed.py, europepmc.py (bioRxiv), chemrxiv.py, patents.py
-tests/                 offline unit tests (respx-mocked) + live smoke tests
 ```
 
-## Tests
+## Lint
 
 ```bash
-uv run pytest            # offline, mocked HTTP
-uv run pytest -m live    # hits the real APIs
 uv run ruff check .
 ```
