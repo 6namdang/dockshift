@@ -32,6 +32,9 @@ from app.config import Settings, get_settings
 from app.literature.models import Document, FullTextMode, SearchRequest, Source
 from app.literature.service import LiteratureSearchService
 from app.qsar import chem
+from app.qsar.cluster import cluster as cluster_molecules
+from app.qsar.cluster import pick_diverse, similarity_matrix
+from app.qsar.library import ensure_downloaded, load_library, screen
 from app.qsar.resolve import resolve_name
 from app.qsar.service import QsarService
 
@@ -301,6 +304,9 @@ class PipelineService:
         profiles,
         papers_considered: int | None = None,
         dropped: list[DroppedCandidate] | None = None,
+        diverse: bool = False,
+        library_screened: int | None = None,
+        query_smiles: str | None = None,
     ) -> ShortlistResponse:
         predictions = {p.query: p for p in activity.predictions}
         profile_by_query = {p.query: p for p in profiles.profiles}
@@ -309,24 +315,42 @@ class PipelineService:
         # Most potent first; anything that failed to score sinks to the bottom.
         scored.sort(key=lambda row: row[3].predicted_pic50 or float("-inf"), reverse=True)
 
+        # Compare the molecules with each other, not just against the training set.
+        smiles = [p.smiles or "" for _, _, _, p in scored]
+        clusters = cluster_molecules(smiles)
+        similarity = similarity_matrix(smiles)
+
+        scoreable = [i for i, row in enumerate(scored) if row[3].predicted_pic50 is not None]
+        if diverse:
+            # Prefer a spread of chemotypes over several variations on one scaffold.
+            chosen = set(pick_diverse(scoreable, clusters, count))
+        else:
+            chosen = set(scoreable[:count])
+
         entries = [
             ShortlistEntry(
-                rank=i,
+                rank=i + 1,
                 name=name,
                 note=note,
                 citations=cites,
                 prediction=prediction,
                 profile=profile_by_query.get(name),
-                selected=i <= count and prediction.predicted_pic50 is not None,
+                selected=i in chosen,
+                cluster=clusters[i] if i < len(clusters) else None,
             )
-            for i, (name, note, cites, prediction) in enumerate(scored, start=1)
+            for i, (name, note, cites, prediction) in enumerate(scored)
         ]
+        distinct = {c for c in clusters if c is not None}
         return ShortlistResponse(
             target=target,
             entries=entries,
             shortlist_size=count,
             papers_considered=papers_considered,
             dropped=dropped or [],
+            similarity=similarity,
+            chemotypes=len(distinct) or None,
+            library_screened=library_screened,
+            query_smiles=query_smiles,
         )
 
     async def shortlist(self, target_id: str, count: int = DEFAULT_SHORTLIST) -> ShortlistResponse:
@@ -378,7 +402,67 @@ class PipelineService:
             profiles,
             papers_considered=proposal.papers_considered,
             dropped=proposal.dropped,
+            diverse=True,
         )
+
+    # ------------------------------------------------------------ library screen
+    async def library_screen(
+        self, target_id: str, query: str, count: int = DEFAULT_SHORTLIST, picks: int = 12
+    ) -> ShortlistResponse:
+        """Screen a compound library for molecules like ``query``, then score the picks.
+
+        ``query`` is a compound name or SMILES. Every hit is a real library compound, so
+        nothing here can be invented: the screen ranks by structural similarity, clusters
+        the top of that ranking so the picks are not near-duplicates, and only then runs
+        the QSAR model over the handful that survive.
+        """
+        target = self.get_target(target_id)
+        if not target.qsar_available:
+            raise ValueError(f"No QSAR model is available for {target.name}.")
+        count = max(1, min(count, MAX_SHORTLIST))
+
+        reference, mol = await self.qsar._resolve(query)
+        if mol is None:
+            raise ValueError(reference.error or f"Could not resolve a structure for '{query}'.")
+        query_smiles = reference.smiles or ""
+
+        await ensure_downloaded(self.client, self.settings)
+        hits, _clusters = await asyncio.to_thread(screen, query_smiles, 200, max(picks, count))
+        if not hits:
+            raise ValueError("The library screen returned nothing for that query.")
+
+        smiles_list = [h.smiles for h in hits]
+        activity, profiles = await asyncio.gather(
+            self.qsar.predict_activity(smiles_list), self.qsar.profile(smiles_list)
+        )
+        by_smiles = {h.smiles: h for h in hits}
+        items = [
+            (
+                h.smiles,
+                f"Library compound{f' {h.identifier}' if h.identifier else ''}, "
+                f"Tanimoto {h.similarity:.2f} to {reference.query}.",
+                [],
+            )
+            for h in hits
+        ]
+        library_size = len(load_library())
+        response = self._rank(
+            target,
+            items,
+            count,
+            activity,
+            profiles,
+            diverse=True,
+            library_screened=library_size,
+            query_smiles=query_smiles,
+        )
+        # Library lines carry no identifier, so a raw SMILES would end up as the label.
+        # Name each hit by its final rank; the structure and SMILES identify it precisely.
+        for entry in response.entries:
+            hit = by_smiles.get(entry.name)
+            if hit is not None:
+                entry.name = hit.identifier or f"Compound {entry.rank}"
+        return response
 
 
 __all__ = ["PipelineService", "LLMError", "LLMNotConfiguredError", "TARGETS"]

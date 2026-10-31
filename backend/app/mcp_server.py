@@ -315,6 +315,37 @@ async def find_candidates_in_literature(
     return await _services(ctx).pipeline.literature_shortlist(target_id, count, query)
 
 
+@mcp.tool(title="Screen a compound library")
+async def screen_compound_library(
+    target_id: Annotated[
+        str, Field(description="Target id from list_targets, e.g. 'htert'.", min_length=1)
+    ],
+    query: Annotated[
+        str,
+        Field(
+            description="A compound already known to work against the target, as a name or "
+            "SMILES, e.g. 'BIBR1532'.",
+            min_length=1,
+        ),
+    ],
+    ctx: Context,
+    count: Annotated[
+        int, Field(ge=1, le=12, description="How many molecules to return (default 6).")
+    ] = DEFAULT_SHORTLIST,
+) -> ShortlistResponse:
+    """Find molecules in a compound library that resemble a known active, then score them.
+
+    Ranks 10,000 real ChEMBL compounds by structural similarity (Morgan fingerprint,
+    Tanimoto) to the query, clusters the top of that ranking so the picks are distinct
+    chemotypes rather than near-duplicates, then scores the picks with the target's QSAR
+    model and ranks them by predicted potency.
+
+    Every hit is an existing library compound, so unlike the literature route nothing can
+    be invented. Scores remain model estimates, not measurements. No API key needed.
+    """
+    return await _services(ctx).pipeline.library_screen(target_id, query, count)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Dockshift MCP server")
     parser.add_argument(

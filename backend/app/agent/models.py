@@ -46,6 +46,9 @@ class ShortlistEntry(BaseModel):
     prediction: ActivityPrediction
     profile: PhysicochemicalProfile | None = None
     selected: bool = Field(description="True for the top entries that make the shortlist.")
+    cluster: int | None = Field(
+        None, description="Chemotype group; molecules sharing an id are structurally alike."
+    )
     citations: list[Citation] = Field(
         default_factory=list,
         description="Papers this molecule came from, when found from literature.",
@@ -61,6 +64,19 @@ class ShortlistResponse(BaseModel):
     )
     dropped: list[DroppedCandidate] = Field(
         default_factory=list, description="Proposed compounds rejected, each with the reason."
+    )
+    similarity: list[list[float | None]] = Field(
+        default_factory=list,
+        description="Pairwise Tanimoto similarity between entries, in entry order.",
+    )
+    chemotypes: int | None = Field(
+        None, description="How many distinct chemotypes the scored molecules fall into."
+    )
+    library_screened: int | None = Field(
+        None, description="Compounds searched, when the candidates came from a library screen."
+    )
+    query_smiles: str | None = Field(
+        None, description="The structure the library was screened against."
     )
 
 

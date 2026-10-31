@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 from rdkit import Chem, DataStructs, RDLogger
 from rdkit.Chem import QED, Descriptors, rdMolDescriptors
+from rdkit.Chem.Draw import rdMolDraw2D
 from rdkit.Chem.rdFingerprintGenerator import GetMorganGenerator
 from rdkit.Chem.SaltRemover import SaltRemover
 
@@ -112,3 +113,13 @@ def looks_like_smiles(text: str) -> bool:
     if not candidate or " " in candidate:
         return False
     return Chem.MolFromSmiles(candidate) is not None
+
+
+def to_svg(mol: Chem.Mol, size: int = 200) -> str:
+    """Draw a molecule as an SVG string. Local: no network, works for any structure."""
+    drawer = rdMolDraw2D.MolDraw2DSVG(size, size)
+    options = drawer.drawOptions()
+    options.clearBackground = False  # let the page's own surface show through
+    rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
+    drawer.FinishDrawing()
+    return drawer.GetDrawingText()

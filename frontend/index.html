@@ -249,6 +249,30 @@
               border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); }
   .score { font-variant-numeric: tabular-nums; }
 
+  /* ---------- similarity heatmap ---------- */
+  .diversity { margin-top: 24px; }
+  .diversity h3 { margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+  .diversity .cap { font-size: 12px; color: var(--text-muted); margin-bottom: 10px; }
+  .grid { display: grid; gap: 2px; width: max-content; max-width: 100%; }
+  .grid .lab {
+    font-size: 11px; color: var(--text-secondary); display: flex; align-items: center;
+    justify-content: flex-end; padding-right: 7px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .grid .colhead {
+    font-size: 10px; color: var(--text-muted); text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 3px;
+  }
+  .grid .cell {
+    min-width: 46px; height: 30px; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-variant-numeric: tabular-nums;
+  }
+  .grid .cell.self { background: var(--track) !important; color: var(--text-muted) !important; }
+  .scalebar { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+  .scalebar .ramp { width: 108px; height: 8px; border-radius: 999px;
+    background: linear-gradient(to right, var(--surface-1), var(--series-pred)); border: 1px solid var(--border); }
+
   .caveat { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
   .caveat a { color: var(--text-secondary); }
   .hidden { display: none !important; }
@@ -273,6 +297,7 @@
   <div class="tabs" role="tablist">
     <button id="tab-screen" role="tab" aria-selected="true" aria-controls="view-screen">Screen</button>
     <button id="tab-lit" role="tab" aria-selected="false" aria-controls="view-lit">Literature</button>
+    <button id="tab-libr" role="tab" aria-selected="false" aria-controls="view-libr">Library</button>
   </div>
 
   <div id="view-screen" role="tabpanel" aria-labelledby="tab-screen">
@@ -310,6 +335,25 @@
   </section>
 
     <p class="caveat" id="caveat"></p>
+  </div>
+
+  <div id="view-libr" class="hidden" role="tabpanel" aria-labelledby="tab-libr">
+    <section class="step">
+      <div class="step-head"><span class="step-n">&#9638;</span><h2>Screen a compound library</h2></div>
+      <p class="note">Ranks 10,000 real ChEMBL compounds by similarity to a molecule you
+        already know works, keeps one per chemotype, and scores those.</p>
+      <div class="body">
+        <div class="litform">
+          <input type="text" id="libq" value="BIBR1532" aria-label="Known active compound"
+                 placeholder="a known active: name or SMILES">
+          <label for="libn" class="msg">Molecules</label>
+          <input type="number" id="libn" min="1" max="12" value="6" style="width:68px">
+          <button class="primary" id="libgo">Screen library</button>
+          <span class="msg" id="libstatus"></span>
+        </div>
+        <div id="libresults" style="margin-top:6px"></div>
+      </div>
+    </section>
   </div>
 
   <div id="view-lit" class="hidden" role="tabpanel" aria-labelledby="tab-lit">
@@ -445,14 +489,15 @@ async function run() {
 
     rows = body.entries.map((e) => ({
       rank: e.rank, name: e.name, selected: e.selected, note: e.note,
-      prediction: e.prediction, profile: e.profile,
+      cluster: e.cluster, prediction: e.prediction, profile: e.profile,
     }));
+    markSharedClusters(rows);
     $("runStatus").textContent =
       `${rows.length} molecules scored · top ${body.shortlist_size} shortlisted`;
     renderCandidates(body);
     $("step3").classList.toggle("idle", rows.length === 0);
     $("step3body").innerHTML = "";
-    renderResults($("step3body"), rows);
+    renderResults($("step3body"), rows, body);
   } catch (err) {
     $("runStatus").textContent = "";
     renderRunError(err);
@@ -498,7 +543,55 @@ function renderCandidates(body) {
 }
 
 /* ---------------- step 3 render ---------------- */
-function renderResults(box, data) {
+function markSharedClusters(data) {
+  const counts = {};
+  for (const r of data) if (r.cluster != null) counts[r.cluster] = (counts[r.cluster] || 0) + 1;
+  for (const r of data) r.sharedCluster = r.cluster != null && counts[r.cluster] > 1;
+}
+
+function similarityGrid(names, matrix) {
+  const wrap = el("div", "diversity");
+  wrap.appendChild(el("h3", null, "How alike are these molecules?"));
+  wrap.appendChild(el("div", "cap",
+    "Pairwise Tanimoto similarity. 1.00 is identical chemistry, near 0 is unrelated."));
+
+  const grid = el("div", "grid");
+  grid.style.gridTemplateColumns = `118px repeat(${names.length}, minmax(46px, 1fr))`;
+
+  grid.appendChild(el("div"));                       // corner
+  for (const n of names) {
+    const h = el("div", "colhead", n.length > 9 ? n.slice(0, 8) + "…" : n);
+    h.title = n;
+    grid.appendChild(h);
+  }
+  names.forEach((rowName, i) => {
+    const lab = el("div", "lab", rowName);
+    lab.title = rowName;
+    grid.appendChild(lab);
+    names.forEach((colName, j) => {
+      const v = matrix?.[i]?.[j];
+      const cell = el("div", "cell" + (i === j ? " self" : ""));
+      if (v == null) { cell.textContent = "—"; grid.appendChild(cell); return; }
+      cell.textContent = v.toFixed(2);
+      if (i !== j) {
+        // Sequential: one hue mixed toward the surface, so low values recede in both themes.
+        const pct = Math.round(Math.min(1, Math.max(0, v)) * 100);
+        cell.style.background = `color-mix(in srgb, var(--series-pred) ${pct}%, var(--surface-1))`;
+        cell.style.color = v >= 0.5 ? "#fff" : "var(--text-secondary)";
+      }
+      cell.title = `${rowName} vs ${colName}: ${v.toFixed(3)}`;
+      grid.appendChild(cell);
+    });
+  });
+  wrap.appendChild(grid);
+
+  const scale = el("div", "scalebar");
+  scale.append(el("span", null, "0.0"), el("span", "ramp"), el("span", null, "1.0 similar"));
+  wrap.appendChild(scale);
+  return wrap;
+}
+
+function renderResults(box, data, extra) {
   const scored = data.filter((r) => r.prediction?.predicted_pic50 != null);
   if (!scored.length) { box.appendChild(el("p", "msg", "Nothing could be scored.")); return; }
   const anyMeasured = scored.some((r) => r.prediction.measured_pic50 != null);
@@ -506,6 +599,17 @@ function renderResults(box, data) {
   box.appendChild(plot(scored));
   box.appendChild(axis());
   box.appendChild(details(data));
+  if (extra?.similarity?.length > 1) {
+    if (extra.chemotypes) {
+      const n = el("p", "msg");
+      n.style.marginTop = "18px";
+      n.textContent = extra.chemotypes === scored.length
+        ? `All ${scored.length} are distinct chemotypes — no near-duplicates in this set.`
+        : `${scored.length} molecules fall into ${extra.chemotypes} distinct chemotypes.`;
+      box.appendChild(n);
+    }
+    box.appendChild(similarityGrid(data.map((r) => r.name), extra.similarity));
+  }
   box.appendChild(tableView(data));
 }
 
@@ -621,9 +725,11 @@ function details(data) {
     if (!p || p.predicted_pic50 == null) continue;
     const c = el("div", "detail" + (r.selected ? " sel" : ""));
     const head = el("header");
-    if (p.pubchem_cid) {
+    if (p.smiles) {
+      // Drawn by RDKit on our own server: works for library compounds too, and needs
+      // no PubChem lookup.
       const img = el("img", "struct");
-      img.src = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${p.pubchem_cid}/PNG?image_size=160x160`;
+      img.src = `${API}/api/v1/qsar/htert/structure?size=160&smiles=${encodeURIComponent(p.smiles)}`;
       img.alt = `Structure of ${r.name}`;
       img.loading = "lazy";
       head.appendChild(img);
@@ -632,6 +738,11 @@ function details(data) {
     const h = el("h3");
     h.appendChild(el("span", null, r.name));
     if (r.selected) h.appendChild(el("span", "pill", `#${r.rank}`));
+    if (r.sharedCluster) {
+      const t = el("span", "tag", `chemotype ${r.cluster + 1}`);
+      t.title = "Structurally similar to another molecule in this set.";
+      h.appendChild(t);
+    }
     title.appendChild(h);
     const pot = el("div", "why");
     pot.style.fontSize = "13px";
@@ -746,9 +857,10 @@ async function findMolecules() {
     if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
 
     litRows = body.entries.map((e) => ({
-      rank: e.rank, name: e.name, selected: e.selected, note: e.note,
+      rank: e.rank, name: e.name, selected: e.selected, note: e.note, cluster: e.cluster,
       citations: e.citations || [], prediction: e.prediction, profile: e.profile,
     }));
+    markSharedClusters(litRows);
     $("litstatus").textContent =
       `${body.papers_considered} papers read · ${litRows.length} small molecules found` +
       (body.dropped.length ? ` · ${body.dropped.length} rejected` : "");
@@ -767,7 +879,7 @@ function renderMolecules(body) {
   if (!litRows.length) {
     box.appendChild(el("p", "msg", "No small molecules survived checking. Try another query."));
   } else {
-    renderResults(box, litRows);
+    renderResults(box, litRows, body);
   }
 
   if (body.dropped?.length) {
@@ -793,19 +905,62 @@ function renderMolecules(body) {
   }
 }
 
-/* ---------------- tabs ---------------- */
-function selectTab(name) {
-  const screen = name === "screen";
-  $("tab-screen").setAttribute("aria-selected", String(screen));
-  $("tab-lit").setAttribute("aria-selected", String(!screen));
-  $("view-screen").classList.toggle("hidden", !screen);
-  $("view-lit").classList.toggle("hidden", screen);
+/* ---------------- library tab ---------------- */
+let libRows = [];
 
+async function screenLibrary() {
+  const query = $("libq").value.trim();
+  if (!query) { $("libstatus").textContent = "Enter a known active."; return; }
+  const count = Math.max(1, Math.min(12, Number($("libn").value) || 6));
+  $("libgo").disabled = true;
+  $("libstatus").className = "msg";
+  $("libstatus").innerHTML = '<span class="spinner"></span>Screening 10,000 compounds…';
+  $("libresults").innerHTML = "";
+  try {
+    const res = await fetch(
+      `${API}/api/v1/pipeline/htert/library-screen?count=${count}&query=${encodeURIComponent(query)}`,
+      { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+    libRows = body.entries.map((e) => ({
+      rank: e.rank, name: e.name, selected: e.selected, note: e.note, cluster: e.cluster,
+      citations: [], prediction: e.prediction, profile: e.profile,
+    }));
+    markSharedClusters(libRows);
+    $("libstatus").textContent =
+      `${nf.format(body.library_screened)} compounds screened · ${body.chemotypes} chemotypes · ` +
+      `top ${body.shortlist_size} shortlisted`;
+    $("libresults").innerHTML = "";
+    renderResults($("libresults"), libRows, body);
+  } catch (err) {
+    $("libstatus").className = "msg err";
+    $("libstatus").textContent = err.message;
+  } finally {
+    $("libgo").disabled = false;
+  }
+}
+
+/* ---------------- tabs ---------------- */
+const TABS = [
+  ["screen", "view-screen"],
+  ["lit", "view-lit"],
+  ["libr", "view-libr"],
+];
+
+function selectTab(name) {
+  for (const [tab, view] of TABS) {
+    const on = tab === name;
+    $(`tab-${tab}`).setAttribute("aria-selected", String(on));
+    $(view).classList.toggle("hidden", !on);
+  }
 }
 
 /* ---------------- wiring ---------------- */
 $("tab-screen").addEventListener("click", () => selectTab("screen"));
 $("tab-lit").addEventListener("click", () => selectTab("lit"));
+$("tab-libr").addEventListener("click", () => selectTab("libr"));
+$("libgo").addEventListener("click", screenLibrary);
+$("libq").addEventListener("keydown", (e) => { if (e.key === "Enter") screenLibrary(); });
 $("litgo").addEventListener("click", findMolecules);
 $("litq").addEventListener("keydown", (e) => { if (e.key === "Enter") findMolecules(); });
 

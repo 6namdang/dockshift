@@ -35,6 +35,22 @@ async def list_targets(service: ServiceDep) -> list[Target]:
     return service.targets()
 
 
+@router.post("/{target_id}/library-screen", response_model=ShortlistResponse)
+async def library_screen(
+    service: ServiceDep,
+    target_id: str,
+    query: Annotated[
+        str, Query(min_length=1, description="Known active: a compound name or SMILES.")
+    ],
+    count: CountQuery = DEFAULT_SHORTLIST,
+) -> ShortlistResponse:
+    """Screen a 10,000-compound library for molecules like a known active, then score them."""
+    try:
+        return await service.library_screen(target_id, query, count)
+    except (LLMNotConfiguredError, LLMError, ValueError) as exc:
+        raise _handle(exc) from exc
+
+
 @router.post("/{target_id}/literature-shortlist", response_model=ShortlistResponse)
 async def literature_shortlist(
     service: ServiceDep,

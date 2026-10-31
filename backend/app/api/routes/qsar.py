@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response
 
 from app.api.deps import get_qsar_service
 from app.qsar import ActivityResponse, DatasetSearchResult, ProfileResponse, QsarService
@@ -54,3 +54,21 @@ async def search_dataset(
 async def model_info(service: ServiceDep) -> dict[str, Any]:
     """Model provenance: training data, performance, applicability domain, citation."""
     return await service.model_info()
+
+
+@router.get("/structure", response_class=Response)
+async def structure(
+    smiles: Annotated[str, Query(min_length=1, max_length=4000, description="SMILES to draw.")],
+    size: Annotated[int, Query(ge=80, le=600)] = 200,
+) -> Response:
+    """Render a structure as SVG, locally with RDKit."""
+    from app.qsar import chem
+
+    mol = chem.standardise(smiles)
+    if mol is None:
+        raise HTTPException(status_code=422, detail="Not a parsable structure.")
+    return Response(
+        content=chem.to_svg(mol, size),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
