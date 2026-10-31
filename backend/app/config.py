@@ -28,10 +28,6 @@ class Settings(BaseSettings):
     contact_email: str | None = None
     # Optional. Raises the NCBI E-utilities limit from 3 to 10 requests/second.
     ncbi_api_key: str | None = None
-    # Required for patent search. Request one at https://www.lens.org (Profile -> API).
-    lens_api_token: str | None = Field(
-        None, validation_alias=AliasChoices("lens_api_token", "lens_api")
-    )
 
     # --- LLM (candidate proposal) --------------------------------------------------
     # Any OpenAI-compatible endpoint. Without a key the candidate step reports that it

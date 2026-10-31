@@ -12,7 +12,6 @@ class Source(StrEnum):
     PUBMED = "pubmed"
     BIORXIV = "biorxiv"
     CHEMRXIV = "chemrxiv"
-    PATENTS = "patents"
     PUBCHEM = "pubchem"
 
 
@@ -30,20 +29,16 @@ class Document(BaseModel):
     id: str = Field(description="Stable id '<source>:<native id>'; pass it to get_full_text.")
     source: Source
     title: str
-    authors: list[str] = Field(
-        default_factory=list, description="Authors, or inventors for patents."
-    )
+    authors: list[str] = Field(default_factory=list, description="Author names.")
     abstract: str | None = None
     published_date: str | None = Field(None, description="ISO date (YYYY-MM-DD, YYYY-MM or YYYY).")
-    venue: str | None = Field(None, description="Journal, preprint server, or patent office.")
+    venue: str | None = Field(None, description="Journal or preprint server.")
     doi: str | None = None
     url: str | None = None
     identifiers: dict[str, str] = Field(
-        default_factory=dict, description="Native ids, e.g. pmid, pmcid, epmc_id, lens_id."
+        default_factory=dict, description="Native ids, e.g. pmid, pmcid, epmc_id, cid."
     )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict, description="Source-specific extras, e.g. patent applicants."
-    )
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Source-specific extras.")
     full_text_available: bool = Field(
         False, description="Whether full text can likely be retrieved for this document."
     )

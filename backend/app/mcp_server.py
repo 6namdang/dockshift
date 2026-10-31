@@ -45,10 +45,10 @@ Tools for drug-discovery research: scientific literature search, plus an hTERT
 telomerase QSAR model.
 
 Workflow: call `search_literature` first. Results across PubMed, bioRxiv, ChemRxiv,
-patents and PubChem (compounds) come back merged and ranked by `confidence` (0-1,
+and PubChem (compounds) come back merged and ranked by `confidence` (0-1,
 lexical match of the query against title + abstract). Full text is attached
 automatically only for highly relevant, open-access hits. Call `get_full_text` with a
-result `id` when you need the full paper/patent for a hit that didn't get it. Always
+result `id` when you need the full paper for a hit that didn't get it. Always
 cite the `url` or `doi` of the documents you use.
 
 hTERT QSAR: `list_targets` then `shortlist_inhibitors` scores a target's candidate
@@ -101,7 +101,7 @@ def _service(ctx: Context) -> LiteratureSearchService:
     return _services(ctx).literature
 
 
-@mcp.tool(title="Search literature & patents")
+@mcp.tool(title="Search the literature")
 async def search_literature(
     query: Annotated[
         str,
@@ -118,9 +118,7 @@ async def search_literature(
     sources: Annotated[
         list[Source] | None,
         Field(
-            description=(
-                "Sources to search. Default: all (pubmed, biorxiv, chemrxiv, patents, pubchem)."
-            )
+            description=("Sources to search. Default: all (pubmed, biorxiv, chemrxiv, pubchem).")
         ),
     ] = None,
     max_results_per_source: Annotated[
@@ -142,10 +140,10 @@ async def search_literature(
         ),
     ] = FullTextMode.AUTO,
 ) -> SearchResponse:
-    """Search PubMed, bioRxiv, ChemRxiv, patents (Lens.org) and PubChem in one call.
+    """Search PubMed, bioRxiv, ChemRxiv and PubChem in one call.
 
     Returns hits merged across sources, sorted by `confidence` (0-1). Each hit has title,
-    authors (inventors for patents; empty for PubChem compounds), abstract, date, venue,
+    authors (empty for PubChem compounds), abstract, date, venue,
     DOI/URL and an `id` usable with
     `get_full_text`. Sources that fail or are not configured are listed in `errors`; the
     other sources' results are still returned.
@@ -168,14 +166,14 @@ async def get_full_text(
         Field(
             description=(
                 "A result `id` from search_literature, "
-                "e.g. 'pubmed:38012345' or 'patents:012-345-678-901-23X'."
+                "e.g. 'pubmed:38012345' or 'biorxiv:PPR421180'."
             )
         ),
     ],
     ctx: Context,
 ) -> FullTextResult:
-    """Fetch the full text of one document: open-access papers via Europe PMC, patents as
-    claims + description via Lens.org. Long texts are truncated. Use sparingly: only for
+    """Fetch the full text of one document: open-access papers via Europe PMC.
+    Long texts are truncated. Use sparingly: only for
     documents that look highly relevant, since full texts are large."""
     return await _service(ctx).get_full_text(document_id)
 
@@ -303,7 +301,7 @@ async def find_candidates_in_literature(
 ) -> ShortlistResponse:
     """Search the literature for a target, pull candidate small molecules out of it, and score them.
 
-    Searches PubMed, bioRxiv, ChemRxiv and patents for inhibitors of the target, has an LLM
+    Searches PubMed, bioRxiv and ChemRxiv for inhibitors of the target, has an LLM
     propose compounds grounded in those abstracts, then keeps only proposals that resolve to
     a real structure in PubChem and pass a small-molecule check (molecular weight, rotatable
     bonds, heavy atoms). Survivors are scored with the target's QSAR model and ranked.

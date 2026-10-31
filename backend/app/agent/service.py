@@ -174,8 +174,6 @@ class PipelineService:
         count = max(1, min(count, MAX_PROPOSALS))
 
         sources = [Source.PUBMED, Source.BIORXIV, Source.CHEMRXIV]
-        if self.settings.lens_api_token:
-            sources.append(Source.PATENTS)
 
         search = await self.literature.search(
             SearchRequest(

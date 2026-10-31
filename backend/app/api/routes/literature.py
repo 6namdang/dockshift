@@ -14,7 +14,7 @@ ServiceDep = Annotated[LiteratureSearchService, Depends(get_literature_service)]
 
 @router.post("/search", response_model=SearchResponse)
 async def search_literature(body: SearchRequest, service: ServiceDep) -> SearchResponse:
-    """Search PubMed, bioRxiv, ChemRxiv and patents; results ranked by lexical confidence."""
+    """Search PubMed, bioRxiv, ChemRxiv and PubChem; ranked by lexical confidence."""
     return await service.search(body)
 
 
