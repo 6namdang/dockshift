@@ -2,39 +2,42 @@
 
     uv run uvicorn app.main:app --reload
 
-REST API under /api/v1, OpenAPI docs at /docs, MCP (Streamable HTTP) at /mcp.
+REST API lives under /api/v1. HTTP MCP at /mcp is separately opt-in and authenticated.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import health, literature, qsar
+from app.api.routes import health, literature, qsar, structural
 from app.config import BACKEND_DIR, get_settings
 from app.literature import LiteratureSearchService
 from app.literature.http import build_http_client
-from app.mcp_server import mcp
+from app.mcp_server import create_mcp_http_app, mcp
 from app.qsar import QsarService
+from app.structural import StructuralService
 
 
 def create_app() -> FastAPI:
     settings = get_settings()
     logging.basicConfig(level=logging.INFO)
-
-    # Build the MCP HTTP app first: its session manager must exist before the lifespan runs.
-    mcp_app = mcp.streamable_http_app(streamable_http_path="/mcp")
+    mcp_app = create_mcp_http_app(settings) if settings.mcp_http_enabled else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with build_http_client(settings) as client, mcp.session_manager.run():
+        async with AsyncExitStack() as stack:
+            client = await stack.enter_async_context(build_http_client(settings))
+            if mcp_app is not None:
+                await stack.enter_async_context(mcp.session_manager.run())
             app.state.literature_service = LiteratureSearchService(client, settings)
             app.state.qsar_service = QsarService(client, settings)
+            app.state.structural_service = StructuralService(settings)
             yield
 
     app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
@@ -50,16 +53,17 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix="/api/v1")
     api.include_router(literature.router)
     api.include_router(qsar.router)
+    api.include_router(structural.router)
     app.include_router(health.router)
     app.include_router(api)
 
-    # The frontend, served same-origin at /ui so it needs no CORS exemption.
     frontend = BACKEND_DIR.parent / "frontend"
     if (frontend / "index.html").is_file():
         app.mount("/ui", StaticFiles(directory=frontend, html=True), name="frontend")
 
-    # Mounted last at the root so FastAPI's own routes win; the MCP app only serves /mcp.
-    app.mount("/", mcp_app)
+    if mcp_app is not None:
+        # Mounted last so FastAPI routes win; the authenticated MCP app only serves /mcp.
+        app.mount("/", mcp_app)
     return app
 
 

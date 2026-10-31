@@ -1,28 +1,33 @@
-"""MCP server exposing the literature-search tools to agents.
+"""MCP server exposing literature, hTERT QSAR, and structural tools to agents.
 
 Run standalone over stdio (for Claude Desktop / Claude Code / any MCP client):
 
     uv run python -m app.mcp_server
 
-Or over Streamable HTTP, standalone:
+Or over separately enabled and Bearer-authenticated Streamable HTTP:
 
-    uv run python -m app.mcp_server --http --port 8001      # -> http://127.0.0.1:8001/mcp
+    MCP_HTTP_ENABLED=true MCP_HTTP_TOKEN=... \\
+      uv run python -m app.mcp_server --http --port 8001
 
-The FastAPI app also mounts this server at ``/mcp`` (see ``app.main``).
+The FastAPI app mounts this server at ``/mcp`` only when the same HTTP MCP settings are valid.
+Stdio remains available without an HTTP token.
 """
 
 from __future__ import annotations
 
 import argparse
+import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer
-from pydantic import Field
+from pydantic import Field, SecretStr
+from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.literature import (
     FullTextMode,
     FullTextResult,
@@ -33,6 +38,20 @@ from app.literature import (
 )
 from app.literature.http import build_http_client
 from app.qsar import ActivityResponse, DatasetSearchResult, ProfileResponse, QsarService
+from app.structural import (
+    AlphaFold3Request,
+    DockingRequest,
+    FPocketRequest,
+    GromacsRequest,
+    LigandPreparationRequest,
+    PocketComparisonRequest,
+    PocketPlanRequest,
+    ReceptorPreparationRequest,
+    StructuralService,
+    StructuralWorkflowRequest,
+    TMAlignRequest,
+)
+from app.structural.models import FileInput, PocketBoxRequest
 
 INSTRUCTIONS = """\
 Tools for drug-discovery research: scientific literature search, plus an hTERT
@@ -52,6 +71,20 @@ model estimate with roughly half-a-log-unit error: report it as a prediction, ne
 measurement, say when a compound falls outside the applicability domain (`domain: "out"`),
 and prefer `measured_pic50` whenever it is present. Call `get_htert_model_info` for the
 model's performance and citation before making strong claims about its output.
+
+Structural discovery: call `structural_preflight` before jobs. Structural tools are thin
+adapters around configured TM-align, official AlphaFold 3, fpocket, Open Babel, AutoDock
+Vina and local GROMACS executables; none of those engines or AF3 assets are bundled. Before
+calling the workflow, use individual alignment, fpocket, pocket-comparison, and pocket-box
+tools, then create an immutable pocket plan. Present its exact digest, artifact, pocket IDs,
+and boxes for scientist approval. The workflow accepts only approval bound to that proposal and
+does not rerun AF3, TM-align, or fpocket. Run AF3 standalone first when needed and plan with its
+explicit `top_ranked_structure`. Large inline MSAs/templates must be omitted for AF3 pipeline
+generation until a future file-backed interface exists. Vina values are docking scores, not
+measured affinities. GROMACS requires a scientist-approved, already parameterized and solvated
+system bundle; its energy and convergence analysis happens downstream after the run. MCP stdio
+is a local process transport and needs no HTTP token. HTTP MCP is separately disabled by default
+and requires `MCP_HTTP_TOKEN` when enabled; the structural REST token is never reused implicitly.
 """
 
 
@@ -61,6 +94,7 @@ class Services:
 
     literature: LiteratureSearchService
     qsar: QsarService
+    structural: StructuralService
 
 
 @asynccontextmanager
@@ -70,16 +104,68 @@ async def _lifespan(_server: MCPServer) -> AsyncIterator[Services]:
         yield Services(
             literature=LiteratureSearchService(client, settings),
             qsar=QsarService(client, settings),
+            structural=StructuralService(settings),
         )
 
 
 mcp = MCPServer(
     name="dockshift",
-    title="Dockshift literature search & hTERT QSAR",
+    title="Dockshift literature, hTERT QSAR & structural discovery",
     instructions=INSTRUCTIONS,
     version="0.2.0",
     lifespan=_lifespan,
 )
+
+_MCP_HTTP_BODY_LIMIT = 4 * 1024 * 1024
+
+
+class MCPHTTPBearerAuth:
+    """Constant-time static Bearer authentication for the entire HTTP MCP app."""
+
+    def __init__(self, app: ASGIApp, token: SecretStr) -> None:
+        self.app = app
+        self.token = token
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        authorization = headers.get(b"authorization", b"").decode("latin-1")
+        scheme, separator, supplied = authorization.partition(" ")
+        if not separator or scheme.lower() != "bearer" or not supplied:
+            response = JSONResponse(
+                {"code": "mcp_auth_required", "message": "A Bearer token is required."},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            await response(scope, receive, send)
+            return
+        if not secrets.compare_digest(supplied, self.token.get_secret_value()):
+            response = JSONResponse(
+                {"code": "mcp_auth_invalid", "message": "The Bearer token is invalid."},
+                status_code=403,
+            )
+            await response(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+def create_mcp_http_app(settings: Settings | None = None) -> ASGIApp:
+    """Build the separately enabled and authenticated Streamable HTTP MCP app."""
+    configured = settings or get_settings()
+    if not configured.mcp_http_enabled:
+        raise RuntimeError("HTTP MCP is disabled; set MCP_HTTP_ENABLED=true to enable it.")
+    token = configured.mcp_http_token
+    if token is None or not token.get_secret_value():
+        raise RuntimeError(
+            "HTTP MCP is enabled without MCP_HTTP_TOKEN; refusing to expose the endpoint."
+        )
+    app = mcp.streamable_http_app(
+        streamable_http_path="/mcp",
+        max_request_body_size=_MCP_HTTP_BODY_LIMIT,
+    )
+    return MCPHTTPBearerAuth(app, token)
 
 
 def _services(ctx: Context) -> Services:
@@ -244,6 +330,151 @@ async def get_htert_model_info(ctx: Context) -> dict[str, Any]:
     return await _services(ctx).qsar.model_info()
 
 
+@mcp.tool(title="Structural engine preflight")
+async def structural_preflight(ctx: Context) -> dict[str, Any]:
+    """Report executable and official AlphaFold 3 asset availability without running a job."""
+    result = await _services(ctx).structural.capabilities()
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Align protein structures with TM-align")
+async def run_tmalign(
+    structure_a: Annotated[
+        str,
+        Field(min_length=1, description="Structure A under the structural input/artifact root."),
+    ],
+    structure_b: Annotated[
+        str,
+        Field(min_length=1, description="Structure B under the structural input/artifact root."),
+    ],
+    ctx: Context,
+) -> dict[str, Any]:
+    """Run configured TM-align and return alignment metrics plus the A-to-B transform."""
+    request = TMAlignRequest(
+        structure_a=FileInput(path=structure_a), structure_b=FileInput(path=structure_b)
+    )
+    result = await _services(ctx).structural.tmalign(request)
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Run official AlphaFold 3")
+async def run_alphafold3(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Validate official dialect-v1 input and run the configured official local AF3 script."""
+    result = await _services(ctx).structural.alphafold3(AlphaFold3Request.model_validate(request))
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Prepare docking ligand")
+async def prepare_structural_ligand(
+    name: Annotated[str, Field(min_length=1, max_length=80)],
+    ctx: Context,
+    smiles: Annotated[str | None, Field(description="Ligand SMILES.")] = None,
+    sdf_path: Annotated[
+        str | None, Field(description="SDF path under the structural input/artifact root.")
+    ] = None,
+    random_seed: Annotated[int, Field(ge=0, le=2_147_483_647)] = 61453,
+    optimize: bool = True,
+) -> dict[str, Any]:
+    """Generate a 3D RDKit conformer and Open Babel PDBQT from SMILES or SDF."""
+    request = LigandPreparationRequest(
+        name=name,
+        smiles=smiles,
+        sdf=FileInput(path=sdf_path) if sdf_path else None,
+        random_seed=random_seed,
+        optimize=optimize,
+    )
+    result = await _services(ctx).structural.prepare_ligand(request)
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Prepare rigid docking receptor")
+async def prepare_structural_receptor(
+    structure_path: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description="PDB/mmCIF path under the structural input/artifact root.",
+        ),
+    ],
+    ctx: Context,
+    remove_waters: bool = True,
+    remove_heterogens: bool = False,
+    remove_alternate_locations: bool = True,
+) -> dict[str, Any]:
+    """Conservatively clean a receptor and create rigid-receptor PDBQT with Open Babel."""
+    request = ReceptorPreparationRequest(
+        structure=FileInput(path=structure_path),
+        remove_waters=remove_waters,
+        remove_heterogens=remove_heterogens,
+        remove_alternate_locations=remove_alternate_locations,
+    )
+    result = await _services(ctx).structural.prepare_receptor(request)
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Detect pockets with fpocket")
+async def run_fpocket(
+    structure_path: Annotated[
+        str,
+        Field(min_length=1, description="Protein path under the structural input/artifact root."),
+    ],
+    ctx: Context,
+) -> dict[str, Any]:
+    """Run configured fpocket and return pocket geometry, residues, and reported scores."""
+    result = await _services(ctx).structural.fpocket(
+        FPocketRequest(structure=FileInput(path=structure_path))
+    )
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Compare superimposed pockets")
+async def compare_structural_pockets(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Compare two pockets with a supplied TM-align transform using deterministic geometry."""
+    result = await _services(ctx).structural.compare_pockets(
+        PocketComparisonRequest.model_validate(request)
+    )
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Propose a docking box from one pocket")
+async def generate_structural_pocket_box(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Generate a box proposal; oversized boxes fail and require explicit reviewed coordinates."""
+    result = await _services(ctx).structural.pocket_box(PocketBoxRequest.model_validate(request))
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Create immutable structural pocket plan")
+async def create_structural_pocket_plan(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Hash exact structures, transform, selected pockets and boxes into an approval proposal."""
+    result = await _services(ctx).structural.create_pocket_plan(
+        PocketPlanRequest.model_validate(request)
+    )
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Dock with AutoDock Vina")
+async def run_vina_docking(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Run configured Vina with prepared PDBQT files and an explicit bounded search box."""
+    result = await _services(ctx).structural.dock(DockingRequest.model_validate(request))
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Run structural discovery workflow")
+async def run_structural_workflow(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Run dual-target docking from an exact digest-bound pocket proposal."""
+    result = await _services(ctx).structural.run_workflow(
+        StructuralWorkflowRequest.model_validate(request)
+    )
+    return result.model_dump(mode="json")
+
+
+@mcp.tool(title="Run staged GROMACS protocol")
+async def run_gromacs(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
+    """Run local em/nvt/npt/md; review energy and convergence after the returned result."""
+    result = await _services(ctx).structural.run_gromacs(GromacsRequest.model_validate(request))
+    return result.model_dump(mode="json")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Dockshift MCP server")
     parser.add_argument(
@@ -252,9 +483,11 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8001)
     args = parser.parse_args()
-    get_settings()  # fail fast on invalid configuration
+    settings = get_settings()  # fail fast on invalid configuration
     if args.http:
-        mcp.run("streamable-http", host=args.host, port=args.port)
+        import uvicorn
+
+        uvicorn.run(create_mcp_http_app(settings), host=args.host, port=args.port)
     else:
         mcp.run("stdio")
 
