@@ -41,6 +41,7 @@ def test_health(api):
         "biorxiv",
         "chemrxiv",
         "patents",
+        "pubchem",
     }
 
 

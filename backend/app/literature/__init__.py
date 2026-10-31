@@ -1,4 +1,4 @@
-"""Literature search across PubMed, bioRxiv, ChemRxiv and patents (Lens.org)."""
+"""Literature search across PubMed, bioRxiv, ChemRxiv, patents (Lens.org) and PubChem."""
 
 from app.literature.models import (
     Document,

@@ -7,6 +7,7 @@ from app.literature.service import LiteratureSearchService
 from app.literature.sources.chemrxiv import CROSSREF_WORKS
 from app.literature.sources.europepmc import EUROPE_PMC_BASE
 from app.literature.sources.patents import LENS_SEARCH_URL
+from app.literature.sources.pubchem import PUG_REST_BASE
 from app.literature.sources.pubmed import EUTILS_BASE
 from tests.conftest import make_settings
 from tests.fixtures import payloads
@@ -18,6 +19,15 @@ def mock_all_sources() -> None:
     respx.get(f"{EUROPE_PMC_BASE}/search").respond(json=payloads.EUROPEPMC_BIORXIV_JSON)
     respx.get(CROSSREF_WORKS).respond(json=payloads.CROSSREF_CHEMRXIV_JSON)
     respx.post(LENS_SEARCH_URL).respond(json=payloads.LENS_SEARCH_JSON)
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/name/.*/cids/JSON").respond(
+        json=payloads.PUBCHEM_CIDS_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/property/.*").respond(
+        json=payloads.PUBCHEM_PROPERTIES_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/description/JSON").respond(
+        json=payloads.PUBCHEM_DESCRIPTION_JSON
+    )
 
 
 @respx.mock
@@ -35,6 +45,7 @@ async def test_search_merges_all_sources_sorted_by_confidence(service):
         Source.BIORXIV: 57,
         Source.CHEMRXIV: 3,
         Source.PATENTS: 1234,
+        Source.PUBCHEM: 2,
     }
     assert {d.source for d in response.results} == set(Source)
     confidences = [d.confidence for d in response.results]
@@ -87,6 +98,15 @@ async def test_one_failing_source_does_not_break_the_search(client):
     respx.get(f"{EUTILS_BASE}/esearch.fcgi").respond(status_code=500)
     respx.get(f"{EUROPE_PMC_BASE}/search").respond(json=payloads.EUROPEPMC_BIORXIV_JSON)
     respx.get(CROSSREF_WORKS).respond(json=payloads.CROSSREF_CHEMRXIV_JSON)
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/name/.*/cids/JSON").respond(
+        json=payloads.PUBCHEM_CIDS_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/property/.*").respond(
+        json=payloads.PUBCHEM_PROPERTIES_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/description/JSON").respond(
+        json=payloads.PUBCHEM_DESCRIPTION_JSON
+    )
 
     response = await service.search(SearchRequest(query="kras", full_text=FullTextMode.NEVER))
 
@@ -94,7 +114,11 @@ async def test_one_failing_source_does_not_break_the_search(client):
     assert set(errors) == {Source.PUBMED, Source.PATENTS}
     assert "HTTP 500" in errors[Source.PUBMED]
     assert "LENS_API_TOKEN" in errors[Source.PATENTS]
-    assert {d.source for d in response.results} == {Source.BIORXIV, Source.CHEMRXIV}
+    assert {d.source for d in response.results} == {
+        Source.BIORXIV,
+        Source.CHEMRXIV,
+        Source.PUBCHEM,
+    }
 
 
 @respx.mock

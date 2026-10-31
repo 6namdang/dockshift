@@ -5,9 +5,11 @@ import pytest
 import respx
 
 from app.literature.http import SourceNotConfiguredError, SourceUnavailableError
+from app.literature.models import Document, Source
 from app.literature.sources.chemrxiv import CROSSREF_WORKS, ChemRxivSource, base_doi
 from app.literature.sources.europepmc import EUROPE_PMC_BASE, BioRxivSource
 from app.literature.sources.patents import LENS_SEARCH_URL, PatentSource
+from app.literature.sources.pubchem import PUG_REST_BASE, PubChemSource
 from app.literature.sources.pubmed import EUTILS_BASE, PubMedSource
 from tests.conftest import make_settings
 from tests.fixtures import payloads
@@ -176,3 +178,70 @@ async def test_patent_full_text_includes_claims_and_description(client, settings
     text = await PatentSource(client, settings).fetch_full_text("031-156-664-516-153")
     assert "CLAIMS\n1. A compound of formula (I).\n2. The compound of claim 1" in text
     assert "DESCRIPTION\nField of the invention." in text
+
+
+# -------------------------------------------------------------- PubChem
+@respx.mock
+async def test_pubchem_search_parses_compounds_in_relevance_order(client, settings):
+    cids = respx.get(url__regex=rf"{PUG_REST_BASE}/compound/name/.*/cids/JSON").respond(
+        json=payloads.PUBCHEM_CIDS_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/property/.*").respond(
+        json=payloads.PUBCHEM_PROPERTIES_JSON
+    )
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/description/JSON").respond(
+        json=payloads.PUBCHEM_DESCRIPTION_JSON
+    )
+
+    result = await PubChemSource(client, settings).search("aspirin", 5)
+
+    params = cids.calls.last.request.url.params
+    assert params["tool"] == "dockshift" and params["email"] == "test@example.com"
+
+    assert result.total == 2
+    first, second = result.documents
+    assert [first.id, second.id] == ["pubchem:2244", "pubchem:2662"]  # PubChem CID order
+    assert first.title == "Aspirin"
+    assert first.abstract == "Aspirin is a non-steroidal anti-inflammatory drug."
+    assert first.authors == []
+    assert first.published_date is None
+    assert first.venue == "PubChem"
+    assert first.url == "https://pubchem.ncbi.nlm.nih.gov/compound/2244"
+    assert first.identifiers == {"cid": "2244", "inchikey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"}
+    assert first.metadata["molecular_formula"] == "C9H8O4"
+    assert first.metadata["molecular_weight"] == "180.16"
+    assert first.metadata["iupac_name"] == "2-acetyloxybenzoic acid"
+    assert first.full_text_available is True
+    assert second.title == "Celecoxib"
+
+
+@respx.mock
+async def test_pubchem_unknown_name_returns_no_results(client, settings):
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/name/.*/cids/JSON").respond(
+        status_code=404, json={"Fault": {"Code": "PUGREST.NotFound"}}
+    )
+    props = respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/property/.*")
+    result = await PubChemSource(client, settings).search("zzznotacompound", 5)
+    assert result.total == 0 and result.documents == []
+    assert not props.called
+
+
+async def test_pubchem_full_text_reuses_document_description(client, settings):
+    doc = Document(
+        id="pubchem:2244",
+        source=Source.PUBCHEM,
+        title="Aspirin",
+        abstract="Aspirin is a non-steroidal anti-inflammatory drug.",
+    )
+    # No HTTP mocks registered: a reused abstract must not trigger a network call.
+    text = await PubChemSource(client, settings).fetch_full_text(doc.native_id, doc)
+    assert text == "Aspirin is a non-steroidal anti-inflammatory drug."
+
+
+@respx.mock
+async def test_pubchem_full_text_fetches_description_when_absent(client, settings):
+    respx.get(url__regex=rf"{PUG_REST_BASE}/compound/cid/.*/description/JSON").respond(
+        json=payloads.PUBCHEM_DESCRIPTION_JSON
+    )
+    text = await PubChemSource(client, settings).fetch_full_text("2662")
+    assert text == "Celecoxib is a COX-2 selective nonsteroidal anti-inflammatory drug."

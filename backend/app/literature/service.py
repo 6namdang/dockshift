@@ -29,6 +29,7 @@ from app.literature.sources.base import LiteratureSource, SourceResult
 from app.literature.sources.chemrxiv import ChemRxivSource
 from app.literature.sources.europepmc import BioRxivSource
 from app.literature.sources.patents import PatentSource
+from app.literature.sources.pubchem import PubChemSource
 from app.literature.sources.pubmed import PubMedSource
 from app.literature.text import truncate
 
@@ -39,6 +40,7 @@ SOURCE_CLASSES: dict[Source, type[LiteratureSource]] = {
     Source.BIORXIV: BioRxivSource,
     Source.CHEMRXIV: ChemRxivSource,
     Source.PATENTS: PatentSource,
+    Source.PUBCHEM: PubChemSource,
 }
 
 

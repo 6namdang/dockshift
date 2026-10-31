@@ -161,6 +161,51 @@ LENS_FULL_RECORD_JSON = {
     ],
 }
 
+PUBCHEM_CIDS_JSON = {"IdentifierList": {"CID": [2244, 2662]}}
+
+PUBCHEM_PROPERTIES_JSON = {
+    "PropertyTable": {
+        "Properties": [
+            {
+                "CID": 2244,
+                "Title": "Aspirin",
+                "MolecularFormula": "C9H8O4",
+                "MolecularWeight": "180.16",
+                "IUPACName": "2-acetyloxybenzoic acid",
+                "CanonicalSMILES": "CC(=O)OC1=CC=CC=C1C(=O)O",
+                "InChIKey": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N",
+            },
+            {
+                "CID": 2662,
+                "Title": "Celecoxib",
+                "MolecularFormula": "C17H14F3N3O2S",
+                "MolecularWeight": "381.4",
+                "IUPACName": "4-[5-(4-methylphenyl)-3-(trifluoromethyl)pyrazol-1-yl]benzenesulfonamide",
+                "CanonicalSMILES": "CC1=CC=C(C=C1)C2=CC(=NN2C3=CC=C(C=C3)S(=O)(=O)N)C(F)(F)F",
+                "InChIKey": "RZEKVGVHFLEQIL-UHFFFAOYSA-N",
+            },
+        ]
+    }
+}
+
+PUBCHEM_DESCRIPTION_JSON = {
+    "InformationList": {
+        "Information": [
+            {"CID": 2244, "Title": "Aspirin"},
+            {
+                "CID": 2244,
+                "Description": "Aspirin is a non-steroidal anti-inflammatory drug.",
+                "DescriptionSourceName": "NCI Thesaurus",
+            },
+            {
+                "CID": 2662,
+                "Description": "Celecoxib is a COX-2 selective nonsteroidal anti-inflammatory drug.",
+                "DescriptionSourceName": "NCI Thesaurus",
+            },
+        ]
+    }
+}
+
 JATS_XML = """<?xml version="1.0"?>
 <!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Archiving and Interchange DTD v1.2 20190208//EN" "JATS-archivearticle1.dtd">
 <article xmlns:xlink="http://www.w3.org/1999/xlink">
