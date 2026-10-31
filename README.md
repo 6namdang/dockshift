@@ -10,9 +10,6 @@ Klaus - Mathematics, accelerate scientific discovery, AI/ML, Senior @ UMASS Amhe
 hoang - computational biology, neuromodulation, mit, spaulding and harvard med school
 
 
-## Table of contents
-
-
 
 ## Table of contents
 
