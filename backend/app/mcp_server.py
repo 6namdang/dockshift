@@ -22,6 +22,12 @@ from typing import Annotated, Any
 from mcp.server.mcpserver import Context, MCPServer
 from pydantic import Field
 
+from app.agent import (
+    DEFAULT_SHORTLIST,
+    PipelineService,
+    ShortlistResponse,
+    Target,
+)
 from app.config import get_settings
 from app.literature import (
     FullTextMode,
@@ -45,7 +51,8 @@ automatically only for highly relevant, open-access hits. Call `get_full_text` w
 result `id` when you need the full paper/patent for a hit that didn't get it. Always
 cite the `url` or `doi` of the documents you use.
 
-hTERT QSAR: `predict_htert_activity` estimates telomerase-inhibition potency (pIC50) for
+hTERT QSAR: `list_targets` then `shortlist_inhibitors` scores a target's candidate
+molecules and ranks them by predicted potency. `predict_htert_activity` scores any
 compounds given by name or SMILES, `profile_compound` reports drug-likeness, and
 `search_htert_dataset` finds experimentally measured compounds. Predicted potency is a
 model estimate with roughly half-a-log-unit error: report it as a prediction, never as a
@@ -61,15 +68,19 @@ class Services:
 
     literature: LiteratureSearchService
     qsar: QsarService
+    pipeline: PipelineService
 
 
 @asynccontextmanager
 async def _lifespan(_server: MCPServer) -> AsyncIterator[Services]:
     settings = get_settings()
     async with build_http_client(settings) as client:
+        literature = LiteratureSearchService(client, settings)
+        qsar = QsarService(client, settings)
         yield Services(
-            literature=LiteratureSearchService(client, settings),
-            qsar=QsarService(client, settings),
+            literature=literature,
+            qsar=qsar,
+            pipeline=PipelineService(client, literature, qsar, settings),
         )
 
 
@@ -242,6 +253,66 @@ async def get_htert_model_info(ctx: Context) -> dict[str, Any]:
     predictions accurately.
     """
     return await _services(ctx).qsar.model_info()
+
+
+@mcp.tool(title="List screenable targets")
+async def list_targets(ctx: Context) -> list[Target]:
+    """List protein targets that can be screened, and whether each has a QSAR model.
+
+    Only targets with `qsar_available` can have candidates scored, because scoring needs
+    a model trained on that target's measured compounds.
+    """
+    return _services(ctx).pipeline.targets()
+
+
+@mcp.tool(title="Shortlist inhibitor candidates")
+async def shortlist_inhibitors(
+    target_id: Annotated[
+        str, Field(description="Target id from list_targets, e.g. 'htert'.", min_length=1)
+    ],
+    ctx: Context,
+    count: Annotated[
+        int, Field(ge=1, le=12, description="How many candidates to shortlist (default 6).")
+    ] = DEFAULT_SHORTLIST,
+) -> ShortlistResponse:
+    """Score a target's candidate molecules with its QSAR model and rank them.
+
+    Returns every candidate ranked by predicted potency (pIC50), with `selected` marking
+    the top `count`. Each entry carries its predicted and, where ChEMBL has one, measured
+    potency, its applicability-domain status and its drug-likeness profile.
+
+    Scores are model estimates with roughly half a log unit of error: use them to rank
+    and triage, and say so rather than presenting them as measurements.
+    """
+    return await _services(ctx).pipeline.shortlist(target_id, count)
+
+
+@mcp.tool(title="Find inhibitor candidates in the literature")
+async def find_candidates_in_literature(
+    target_id: Annotated[
+        str, Field(description="Target id from list_targets, e.g. 'htert'.", min_length=1)
+    ],
+    ctx: Context,
+    count: Annotated[
+        int, Field(ge=1, le=12, description="How many molecules to shortlist (default 6).")
+    ] = DEFAULT_SHORTLIST,
+    query: Annotated[
+        str | None,
+        Field(description="Literature query to use; defaults to the target's own query."),
+    ] = None,
+) -> ShortlistResponse:
+    """Search the literature for a target, pull candidate small molecules out of it, and score them.
+
+    Searches PubMed, bioRxiv, ChemRxiv and patents for inhibitors of the target, has an LLM
+    propose compounds grounded in those abstracts, then keeps only proposals that resolve to
+    a real structure in PubChem and pass a small-molecule check (molecular weight, rotatable
+    bonds, heavy atoms). Survivors are scored with the target's QSAR model and ranked.
+
+    `dropped` lists what was rejected and why, and each entry carries the papers it came
+    from. Proposals are a reading of the literature and scores are model estimates: neither
+    is evidence of activity. Requires OPENAI_API_KEY.
+    """
+    return await _services(ctx).pipeline.literature_shortlist(target_id, count, query)
 
 
 def main() -> None:

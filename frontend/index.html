@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>hTERT Potency Explorer</title>
+<title>Dockshift Inhibitor Shortlist</title>
 <style>
   /* ---------- tokens (light) ---------- */
   :root {
     color-scheme: light;
-    --surface-1:      #fcfcfb;   /* card / chart surface */
+    --surface-1:      #fcfcfb;
     --page:           #f9f9f7;
     --text-primary:   #0b0b0b;
     --text-secondary: #52514e;
@@ -16,10 +16,10 @@
     --grid:           #e1e0d9;
     --axis:           #c3c2b7;
     --border:         rgba(11,11,11,0.10);
+    --track:          #e4e3dc;   /* neutral: the unfilled part is not data */
 
     --series-pred:    #2a78d6;   /* categorical slot 1 - predicted */
     --series-meas:    #eb6834;   /* categorical slot 2 - measured */
-    --track:          #e4e3dc;   /* neutral: the unfilled part is not data */
 
     --good:           #0ca30c;
     --warning:        #fab219;
@@ -37,9 +37,9 @@
       --grid:           #2c2c2a;
       --axis:           #383835;
       --border:         rgba(255,255,255,0.10);
+      --track:          #32322f;
       --series-pred:    #3987e5;
       --series-meas:    #d95926;
-      --track:          #32322f;
     }
   }
   :root[data-theme="dark"] {
@@ -52,20 +52,17 @@
     --grid:           #2c2c2a;
     --axis:           #383835;
     --border:         rgba(255,255,255,0.10);
+    --track:          #32322f;
     --series-pred:    #3987e5;
     --series-meas:    #d95926;
-    --track:          #32322f;
   }
 
   * { box-sizing: border-box; }
   body {
-    margin: 0;
-    background: var(--page);
-    color: var(--text-primary);
+    margin: 0; background: var(--page); color: var(--text-primary);
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   .wrap { max-width: 1060px; margin: 0 auto; padding: 32px 16px 64px; }
-
   h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
   .sub { color: var(--text-secondary); font-size: 14px; margin: 0; }
   .topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -76,171 +73,189 @@
     color: var(--text-primary); padding: 7px 12px;
   }
   button:hover { background: var(--page); }
-  button.primary { background: var(--series-pred); border-color: transparent; color: #fff; font-weight: 500; }
+  button.primary { background: var(--series-pred); border-color: transparent; color: #fff; font-weight: 500; padding: 9px 16px; }
   button.primary:hover { filter: brightness(1.07); }
   button:disabled { opacity: .55; cursor: default; }
 
-  .card {
-    background: var(--surface-1);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 18px 20px;
-    margin-top: 20px;
+  /* ---------- step cards ---------- */
+  .step { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+          padding: 18px 20px; margin-top: 18px; }
+  .step-head { display: flex; align-items: baseline; gap: 10px; }
+  .step-n {
+    display: inline-grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px;
+    border-radius: 50%; background: var(--text-primary); color: var(--page);
+    font-size: 12px; font-weight: 600; align-self: center;
   }
-  .card > h2 {
-    font-size: 13px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--text-secondary); margin: 0 0 2px;
-  }
-  .card > .note { font-size: 13px; color: var(--text-muted); margin: 0 0 16px; }
+  .step h2 { font-size: 15px; font-weight: 600; margin: 0; }
+  .step .note { font-size: 13px; color: var(--text-muted); margin: 4px 0 14px 32px; }
+  .step .body { margin-left: 32px; }
+  .step.idle { opacity: .55; }
 
-  /* ---------- input row: one filter row above everything it scopes ---------- */
-  .controls { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+  /* ---------- target ---------- */
+  .target {
+    display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px;
+    border: 1px solid var(--series-pred); border-radius: 10px; background: var(--page);
+    max-width: 560px;
+  }
+  .target .dot-sel { width: 10px; height: 10px; border-radius: 50%; background: var(--series-pred); margin-top: 6px; flex: 0 0 10px; }
+  .target h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .target p { margin: 3px 0 0; font-size: 13px; color: var(--text-secondary); }
+  .target .meta { font-size: 12px; color: var(--text-muted); margin-top: 5px; }
+
+  .runrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .runrow label { font-size: 13px; color: var(--text-secondary); }
+  select, input[type=number] {
+    font: inherit; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--page); color: var(--text-primary);
+  }
   textarea {
-    flex: 1 1 320px; min-height: 42px; resize: vertical;
-    font: inherit; padding: 9px 11px; border-radius: 8px;
-    border: 1px solid var(--border); background: var(--page); color: var(--text-primary);
+    width: 100%; min-height: 44px; resize: vertical; font: inherit; padding: 9px 11px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--page); color: var(--text-primary);
   }
-  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
-  .chips span { font-size: 12px; color: var(--text-muted); margin-right: 2px; }
-  .chip { font-size: 12px; padding: 4px 9px; border-radius: 999px; }
 
-  /* ---------- KPI row of stat tiles ---------- */
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .kpi { background: var(--page); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-  .kpi .label { font-size: 12px; color: var(--text-secondary); }
-  .kpi .value { font-size: 24px; font-weight: 600; margin-top: 2px; } /* proportional figures */
-  .kpi .foot { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  /* ---------- candidates ---------- */
+  .cand { padding: 11px 0; border-bottom: 1px solid var(--grid); }
+  .cand:last-child { border-bottom: 0; }
+  .cand .name { font-weight: 600; font-size: 14px; }
+  .cand .why { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+  .cites { margin-top: 5px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .cite {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid var(--border); color: var(--text-secondary); text-decoration: none;
+    max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cite:hover { background: var(--page); color: var(--text-primary); }
 
-  /* ---------- legend ---------- */
+  /* ---------- ranked plot ---------- */
   .legend { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; font-size: 13px;
             color: var(--text-secondary); margin-bottom: 14px; }
   .legend .item { display: flex; align-items: center; gap: 7px; }
-  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .swatch.ring { box-shadow: 0 0 0 2px var(--surface-1); }
+  .swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px var(--surface-1); }
 
-  /* ---------- dot plot ---------- */
-  .plot-row {
-    display: grid;
-    grid-template-columns: 148px 1fr 62px 86px;
-    align-items: center; gap: 10px;
-    padding: 1px 0;
+  .plot-row { display: grid; grid-template-columns: 26px 150px 1fr 62px 86px; align-items: center; gap: 10px; padding: 1px 0; }
+  .plot-row .rk { font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; }
+  .plot-row.sel .rk {
+    background: var(--text-primary); color: var(--page); border-radius: 50%;
+    width: 20px; height: 20px; display: grid; place-items: center; text-align: center; font-weight: 600;
   }
-  .plot-row .name {
-    font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    color: var(--text-primary);
-  }
-  .plot-row .num {
-    font-size: 13px; text-align: right; font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
-  }
+  .plot-row .name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plot-row:not(.sel) .name, .plot-row:not(.sel) .num { color: var(--text-muted); }
+  .plot-row .num { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
   .plot-row .num.soft { color: var(--text-secondary); }
 
-  .track {
-    position: relative; height: 26px;
-    border-left: 1px solid transparent;
+  .track { position: relative; height: 26px; }
+  .track .gl { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid); }
+  .hit {
+    position: absolute; top: 50%; margin: -13px 0 0 -13px; width: 26px; height: 26px;
+    display: grid; place-items: center; cursor: pointer; background: none; border: 0; padding: 0; border-radius: 50%;
   }
-  .track .gl {             /* solid hairline gridlines, recessive */
-    position: absolute; top: 0; bottom: 0; width: 1px; background: var(--grid);
-  }
-  .hit {                   /* >=24px hit target around an 11px dot */
-    /* Offset with margins, not transform: focusing a transformed element makes
-       Chrome mis-compute scroll-into-view and jump the page. */
-    position: absolute; top: 50%; margin: -13px 0 0 -13px;
-    width: 26px; height: 26px;
-    display: grid; place-items: center; cursor: pointer; background: none;
-    border: 0; padding: 0; border-radius: 50%;
-  }
-  .hit .dot {
-    width: 11px; height: 11px; border-radius: 50%;
-    box-shadow: 0 0 0 2px var(--surface-1);   /* 2px surface ring */
-  }
+  .hit .dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface-1); }
   .hit:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
   .dot.pred { background: var(--series-pred); }
   .dot.meas { background: var(--series-meas); }
-
-  .axis { display: grid; grid-template-columns: 148px 1fr 62px 86px; gap: 10px; margin-top: 6px; }
+  .axis { display: grid; grid-template-columns: 26px 150px 1fr 62px 86px; gap: 10px; margin-top: 6px; }
   .axis .ticks { position: relative; height: 18px; border-top: 1px solid var(--axis); }
-  .axis .tick {
-    position: absolute; transform: translateX(-50%); top: 3px;
-    font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums;
-  }
+  .axis .tick { position: absolute; transform: translateX(-50%); top: 3px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .axis-title { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 2px; }
 
-  /* ---------- per-compound detail cards ---------- */
-  .details { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
-  .detail {
-    border: 1px solid var(--border); border-radius: 10px; padding: 14px;
-    background: var(--page);
-  }
+  /* ---------- detail cards ---------- */
+  .details { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; margin-top: 20px; }
+  .detail { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--page); }
+  .detail.sel { border-color: var(--series-pred); }
   .detail header { display: flex; gap: 12px; align-items: flex-start; }
-  .detail .struct {
-    width: 76px; height: 76px; flex: 0 0 76px; border-radius: 8px;
-    background: #fff; border: 1px solid var(--border); object-fit: contain;
+  .detail .struct { width: 76px; height: 76px; flex: 0 0 76px; border-radius: 8px; background: #fff; border: 1px solid var(--border); object-fit: contain; }
+  .detail h3 { margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+  .tag {
+    font-size: 10px; font-weight: 600; letter-spacing: .03em; padding: 2px 7px;
+    border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary);
+    white-space: nowrap;
   }
-  .detail h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .pill { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--text-primary); color: var(--page); letter-spacing: .03em; }
   .smiles {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px; color: var(--text-muted);
-    word-break: break-all; margin-top: 3px; line-height: 1.35;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    color: var(--text-muted); word-break: break-all; margin-top: 3px; line-height: 1.35;
+    /* Oligonucleotide SMILES run to thousands of characters and would swamp the card. */
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
   .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-  .badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-size: 12px; padding: 3px 9px 3px 7px; border-radius: 999px;
-    border: 1px solid var(--border); background: var(--surface-1);
-    color: var(--text-primary);
-  }
-  .badge svg { flex: 0 0 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 3px 9px 3px 7px;
+           border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary); }
 
-  /* ---------- meters ---------- */
   .meter { margin-top: 12px; }
-  .meter .head {
-    display: flex; justify-content: space-between; align-items: baseline;
-    font-size: 12px; color: var(--text-secondary); margin-bottom: 4px;
-  }
+  .meter .head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
   .meter .head b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .meter .bar {
-    position: relative; height: 8px; border-radius: 999px;
-    background: var(--track); overflow: visible;
-  }
+  .meter .bar { position: relative; height: 8px; border-radius: 999px; background: var(--track); }
   .meter .fill { height: 100%; border-radius: 999px; }
-  .meter .mark {               /* threshold marker */
-    position: absolute; top: -3px; bottom: -3px; width: 2px;
-    background: var(--text-secondary); border-radius: 1px;
-  }
+  .meter .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text-secondary); border-radius: 1px; }
   .meter .cap { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
-  /* ---------- table view (the WCAG-clean twin) ---------- */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--grid); }
   th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-secondary); font-weight: 600; }
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
   .scroll { overflow-x: auto; }
 
-  /* ---------- tooltip: enhances, never gates ---------- */
   #tip {
-    position: fixed; z-index: 10; pointer-events: none; opacity: 0;
-    transition: opacity .1s; max-width: 260px;
-    background: var(--surface-1); color: var(--text-primary);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 10px; font-size: 12px; line-height: 1.45;
-    box-shadow: 0 6px 20px rgba(0,0,0,.16);
+    position: fixed; z-index: 10; pointer-events: none; opacity: 0; transition: opacity .1s; max-width: 260px;
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.45; box-shadow: 0 6px 20px rgba(0,0,0,.16);
   }
-  #tip b { font-weight: 600; }
   #tip .k { color: var(--text-secondary); }
 
   .msg { font-size: 13px; color: var(--text-secondary); }
   .msg.err { color: var(--critical); }
-  #results.busy { opacity: .55; }   /* hold previous render, no skeleton flash */
-  .caveat {
-    font-size: 12px; color: var(--text-muted); margin-top: 22px;
-    border-top: 1px solid var(--border); padding-top: 14px;
+  .panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; background: var(--page); font-size: 13px; }
+  .panel code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .busy { opacity: .55; }
+  .spinner {
+    width: 13px; height: 13px; border-radius: 50%; display: inline-block; vertical-align: -2px;
+    border: 2px solid var(--track); border-top-color: var(--series-pred); animation: spin .7s linear infinite; margin-right: 7px;
   }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
+
+  /* ---------- tabs ---------- */
+  .tabs { display: flex; gap: 4px; margin-top: 20px; border-bottom: 1px solid var(--border); }
+  .tabs button {
+    border: 0; background: none; border-radius: 8px 8px 0 0; padding: 9px 16px;
+    color: var(--text-secondary); font-weight: 500; border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  .tabs button:hover { background: var(--surface-1); color: var(--text-primary); }
+  .tabs button[aria-selected="true"] {
+    color: var(--text-primary); border-bottom-color: var(--series-pred); background: none;
+  }
+
+  /* ---------- literature ---------- */
+  .litform { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .litform input[type=text] {
+    flex: 1 1 320px; font: inherit; padding: 9px 11px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--page); color: var(--text-primary);
+  }
+  .sources { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--text-secondary); }
+  .sources label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  .paper { padding: 14px 0; border-bottom: 1px solid var(--grid); }
+  .paper:last-child { border-bottom: 0; }
+  .paper h4 { margin: 0 0 4px; font-size: 14px; font-weight: 600; line-height: 1.4; }
+  .paper h4 a { color: var(--text-primary); text-decoration: none; }
+  .paper h4 a:hover { text-decoration: underline; }
+  .paper .meta { font-size: 12px; color: var(--text-muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .paper .authors { font-size: 12px; color: var(--text-secondary); margin-top: 3px; }
+  .paper .abs { font-size: 13px; color: var(--text-secondary); margin-top: 7px; line-height: 1.5;
+                display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .paper .abs.open { -webkit-line-clamp: unset; }
+  .paper .more { font-size: 12px; padding: 2px 0; border: 0; background: none; color: var(--series-pred); margin-top: 4px; }
+  .srcbadge { font-size: 10px; font-weight: 600; letter-spacing: .03em; padding: 2px 7px;
+              border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); }
+  .score { font-variant-numeric: tabular-nums; }
+
+  .caveat { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
   .caveat a { color: var(--text-secondary); }
   .hidden { display: none !important; }
-  @media (max-width: 620px) {
-    .plot-row, .axis { grid-template-columns: 96px 1fr 54px; }
+  @media (max-width: 640px) {
+    .plot-row, .axis { grid-template-columns: 24px 96px 1fr 54px; }
     .plot-row .num.ic50, .axis > div:last-child { display: none; }
+    .step .note, .step .body { margin-left: 0; }
   }
 </style>
 </head>
@@ -249,76 +264,77 @@
 
   <div class="topbar">
     <div>
-      <h1>hTERT Potency Explorer</h1>
-      <p class="sub">Predicted telomerase-inhibition potency and drug-likeness, from molecular structure.</p>
+      <h1>Inhibitor shortlist</h1>
+      <p class="sub">Select a target, screen its candidate molecules, rank them by predicted potency.</p>
     </div>
-    <button id="theme" title="Toggle dark mode" aria-label="Toggle dark mode">Theme</button>
+    <button id="theme" aria-label="Toggle dark mode">Theme</button>
   </div>
 
-  <!-- one input row, above everything it scopes -->
-  <div class="card">
-    <h2>Compounds</h2>
-    <p class="note">Names or SMILES, one per line or comma-separated. Names resolve through PubChem. Up to 50.</p>
-    <div class="controls">
-      <textarea id="input" rows="3" spellcheck="false"
-        aria-label="Compound names or SMILES">quercetin, EGCG, BIBR1532, zidovudine, raltitrexed, allicin</textarea>
-      <button class="primary" id="run">Predict</button>
-    </div>
-    <div class="chips">
-      <span>Try:</span>
-      <button class="chip" data-ex="quercetin, EGCG, BIBR1532, zidovudine, raltitrexed, allicin">Paper's six</button>
-      <button class="chip" data-ex="curcumin, resveratrol, genistein, apigenin, luteolin">Natural products</button>
-      <button class="chip" data-ex="imatinib, erlotinib, sorafenib, sunitinib">Kinase drugs</button>
-      <button class="chip" data-ex="CC(=O)Oc1ccccc1C(=O)O">Aspirin (SMILES)</button>
-    </div>
-    <p class="msg" id="status" style="margin-top:10px"></p>
+  <div class="tabs" role="tablist">
+    <button id="tab-screen" role="tab" aria-selected="true" aria-controls="view-screen">Screen</button>
+    <button id="tab-lit" role="tab" aria-selected="false" aria-controls="view-lit">Literature</button>
   </div>
 
-  <div id="results">
-
-    <!-- KPI row -->
-    <div class="card" id="modelCard">
-      <h2>Model</h2>
-      <p class="note" id="modelNote">Loading model card…</p>
-      <div class="kpis" id="kpis"></div>
+  <div id="view-screen" role="tabpanel" aria-labelledby="tab-screen">
+  <!-- STEP 1 -->
+  <section class="step" id="step1">
+    <div class="step-head"><span class="step-n">1</span><h2>Target</h2></div>
+    <p class="note">The protein to find inhibitors for.</p>
+    <div class="body">
+      <div id="targets"></div>
+      <div class="runrow">
+        <label for="count">Shortlist size</label>
+        <input type="number" id="count" min="1" max="12" value="6" style="width:72px">
+        <button class="primary" id="run">Run QSAR</button>
+        <span class="msg" id="runStatus"></span>
+      </div>
     </div>
+  </section>
 
-    <!-- main visualisation -->
-    <div class="card hidden" id="plotCard">
-      <h2>Predicted potency</h2>
-      <p class="note">
-        Position on the pIC50 scale — further right is more potent. Dots, not bars:
-        pIC50 is a log scale with no meaningful zero.
-      </p>
-      <div class="legend" id="legend"></div>
-      <div id="plot"></div>
-      <div class="axis" id="axis"></div>
+  <!-- STEP 2 -->
+  <section class="step idle" id="step2">
+    <div class="step-head"><span class="step-n">2</span><h2>Candidate molecules</h2></div>
+    <p class="note" id="step2note">The molecules screened against this target.</p>
+    <div class="body" id="step2body">
+      <p class="msg">Not run yet.</p>
     </div>
+  </section>
 
-    <!-- per-compound detail -->
-    <div class="card hidden" id="detailCard">
-      <h2>Per compound</h2>
-      <p class="note">Applicability domain, drug-likeness and nearest measured compounds.</p>
-      <div class="details" id="details"></div>
+  <!-- STEP 3 -->
+  <section class="step idle" id="step3">
+    <div class="step-head"><span class="step-n">3</span><h2>Results</h2></div>
+    <p class="note" id="step3note">QSAR score for each molecule, most potent first.</p>
+    <div class="body" id="step3body">
+      <p class="msg">Not run yet.</p>
     </div>
+  </section>
 
-    <!-- table twin -->
-    <div class="card hidden" id="tableCard">
-      <h2>Table view</h2>
-      <p class="note">Every value shown above, in text.</p>
-      <div class="scroll"><table id="table"></table></div>
-    </div>
+    <p class="caveat" id="caveat"></p>
   </div>
 
-  <p class="caveat" id="caveat"></p>
+  <div id="view-lit" class="hidden" role="tabpanel" aria-labelledby="tab-lit">
+    <section class="step">
+      <div class="step-head"><span class="step-n">&#9906;</span><h2>Find molecules in the literature</h2></div>
+      <p class="note">Searches the literature, pulls out candidate small molecules, and scores them with the same QSAR model.</p>
+      <div class="body">
+        <div class="litform">
+          <input type="text" id="litq" value="telomerase inhibitor" aria-label="Search query"
+                 placeholder="e.g. hTERT inhibitor structure-activity">
+          <label for="litn" class="msg">Molecules</label>
+          <input type="number" id="litn" min="1" max="12" value="6" style="width:68px">
+          <button class="primary" id="litgo">Find molecules</button>
+          <span class="msg" id="litstatus"></span>
+        </div>
+        <div id="litresults" style="margin-top:6px"></div>
+      </div>
+    </section>
+  </div>
 </div>
 
 <div id="tip" role="status" aria-live="polite"></div>
 
 <script>
-// Served by FastAPI (same origin); falls back to the dev server when opened as a file.
 const API = location.protocol === "file:" ? "http://127.0.0.1:8000" : "";
-
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -329,7 +345,6 @@ const el = (tag, cls, text) => {
 const fmt = (v, d = 2) => (v == null ? "—" : Number(v).toFixed(d));
 const nf = new Intl.NumberFormat("en-US");
 
-// pIC50 axis. Fixed, readable bounds that cover the dataset and typical predictions.
 const AXIS = { min: 4, max: 8.5, ticks: [4, 5, 6, 7, 8] };
 const pos = (v) => ((Math.min(Math.max(v, AXIS.min), AXIS.max) - AXIS.min) / (AXIS.max - AXIS.min)) * 100;
 
@@ -339,7 +354,6 @@ const ICON = {
   bad:  '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M4.5 4.5l7 7m0-7l-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   info: '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><circle cx="8" cy="8" r="6.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="8" cy="4.9" r="0.9" fill="currentColor"/></svg>',
 };
-// Status always ships as icon + label, never colour alone.
 function badge(kind, label, title) {
   const colors = { good: "var(--good)", warn: "var(--warning)", bad: "var(--critical)", info: "var(--text-secondary)" };
   const b = el("span", "badge");
@@ -356,8 +370,7 @@ function showTip(e, html) {
   tip.style.opacity = "1";
   const r = tip.getBoundingClientRect();
   const t = e.currentTarget.getBoundingClientRect();
-  let x = t.left + t.width / 2 - r.width / 2;
-  x = Math.max(8, Math.min(x, innerWidth - r.width - 8));
+  let x = Math.max(8, Math.min(t.left + t.width / 2 - r.width / 2, innerWidth - r.width - 8));
   let y = t.top - r.height - 8;
   if (y < 8) y = t.bottom + 8;
   tip.style.left = x + "px";
@@ -367,133 +380,160 @@ const hideTip = () => (tip.style.opacity = "0");
 addEventListener("scroll", hideTip, { passive: true });
 
 /* ---------------- state ---------------- */
-let card = null;        // model card
-let rows = [];          // merged prediction + profile per compound
+let targets = [];
+let target = null;
+let rows = [];          // {rank, name, selected, rationale, citations, prediction, profile}
+let threshold = 0.272;
 
-/* ---------------- model card + KPIs ---------------- */
-async function loadModel() {
+/* ---------------- targets ---------------- */
+async function loadTargets() {
   try {
-    const r = await fetch(`${API}/api/v1/qsar/htert/model`);
+    const r = await fetch(`${API}/api/v1/pipeline/targets`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    card = await r.json();
+    targets = await r.json();
   } catch (err) {
-    $("modelNote").textContent = `Could not reach the backend (${err.message}). Start it with: uv run uvicorn app.main:app --reload`;
-    $("modelNote").className = "note msg err";
+    $("targets").innerHTML = "";
+    const p = el("p", "msg err", `Could not reach the backend (${err.message}). Start it with: uv run uvicorn app.main:app --reload`);
+    $("targets").appendChild(p);
+    $("run").disabled = true;
     return;
   }
-  const td = card.training_data, ad = card.applicability_domain, perf = card.performance;
-  $("modelNote").textContent = `${card.algorithm} · ${card.target}`;
-
-  const tiles = [
-    ["Measured compounds", nf.format(td.compounds), `pIC50 ${td.pic50_min}–${td.pic50_max}`],
-    ["Held-out R²", perf.paper_heldout_r2, `RMSE ${perf.paper_heldout_rmse} · ~0.5 log units`],
-    ["Domain threshold", ad.threshold, "max Tanimoto to training set"],
-    ["Features", nf.format(card.features.total), `${nf.format(card.features.morgan_fingerprint_bits)} FP + ${card.features.rdkit_descriptors} desc`],
-  ];
-  const box = $("kpis");
+  target = targets[0] || null;
+  const box = $("targets");
   box.innerHTML = "";
-  for (const [label, value, foot] of tiles) {
-    const k = el("div", "kpi");
-    k.append(el("div", "label", label), el("div", "value", String(value)), el("div", "foot", foot));
-    box.appendChild(k);
+  for (const t of targets) {
+    const card = el("div", "target");
+    card.appendChild(el("span", "dot-sel"));
+    const body = el("div");
+    body.appendChild(el("h3", null, t.name));
+    body.appendChild(el("p", null, t.description));
+    const meta = el("div", "meta");
+    meta.textContent = (t.chembl_id ? `ChEMBL ${String(t.chembl_id).replace(/^CHEMBL/i, "")} · ` : "") +
+      (t.qsar_available ? "QSAR model available" : "no QSAR model — cannot be scored");
+    body.appendChild(meta);
+    card.appendChild(body);
+    box.appendChild(card);
+  }
+  if (targets.length === 1) {
+    const n = el("p", "msg");
+    n.style.marginTop = "8px";
+    n.textContent = "hTERT is the only target with a trained QSAR model. Another target needs its own model before its candidates can be scored.";
+    box.appendChild(n);
   }
   $("caveat").innerHTML =
-    `Predicted values are model estimates, not measurements — useful for ranking and triage only. ` +
-    `Compounds marked <em>outside the domain</em> are extrapolation. ` +
-    `Model: ${card.citation} <a href="https://doi.org/${card.doi}" target="_blank" rel="noopener">${card.doi}</a> · ` +
-    `<a href="${card.source_repository}" target="_blank" rel="noopener">source repository</a> (${card.license}).`;
+    "Potencies are QSAR predictions (about half a log unit of error) — for ranking and triage. " +
+    "Measured values, where shown, come from ChEMBL. " +
+    'Model: Iraqui &amp; Dang (2026), <a href="https://doi.org/10.26434/chemrxiv.15005669/v2" target="_blank" rel="noopener">10.26434/chemrxiv.15005669/v2</a>.';
 }
 
-/* ---------------- run ---------------- */
-function parseCompounds(text) {
-  return [...new Set(text.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean))].slice(0, 50);
-}
-
+/* ---------------- run the pipeline ---------------- */
 async function run() {
-  const compounds = parseCompounds($("input").value);
-  if (!compounds.length) {
-    $("status").textContent = "Enter at least one compound.";
-    $("status").className = "msg err";
-    return;
-  }
+  if (!target) return;
+  const count = Math.max(1, Math.min(12, Number($("count").value) || 6));
   $("run").disabled = true;
-  $("results").classList.add("busy");
-  $("status").className = "msg";
-  $("status").textContent = `Predicting ${compounds.length} compound${compounds.length > 1 ? "s" : ""}…`;
+  $("runStatus").className = "msg";
+  $("runStatus").innerHTML = '<span class="spinner"></span>Scoring…';
+  $("step2").classList.remove("idle");
+  $("step2body").innerHTML = '<p class="msg"><span class="spinner"></span>Preparing molecules…</p>';
+  $("step3").classList.add("idle");
+  $("step3body").innerHTML = '<p class="msg">Waiting for scores…</p>';
 
   try {
-    const post = (path) =>
-      fetch(`${API}/api/v1/qsar/htert/${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(compounds),
-      }).then(async (r) => {
-        if (!r.ok) throw new Error(`${path}: HTTP ${r.status} ${(await r.text()).slice(0, 120)}`);
-        return r.json();
-      });
+    const res = await fetch(`${API}/api/v1/pipeline/${target.id}/shortlist?count=${count}`, { method: "POST" });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw Object.assign(new Error(body.detail || `HTTP ${res.status}`), { status: res.status });
 
-    const [pred, prof] = await Promise.all([post("predict"), post("profile")]);
-    const byQuery = new Map(prof.profiles.map((p) => [p.query, p]));
-    rows = pred.predictions.map((p) => ({ ...p, profile: byQuery.get(p.query) || {} }));
-
-    const ok = rows.filter((r) => !r.error).length;
-    $("status").textContent = `${ok} of ${rows.length} resolved. Threshold ${pred.domain_threshold}.`;
-    render(pred.domain_threshold);
+    rows = body.entries.map((e) => ({
+      rank: e.rank, name: e.name, selected: e.selected, note: e.note,
+      prediction: e.prediction, profile: e.profile,
+    }));
+    $("runStatus").textContent =
+      `${rows.length} molecules scored · top ${body.shortlist_size} shortlisted`;
+    renderCandidates(body);
+    $("step3").classList.toggle("idle", rows.length === 0);
+    $("step3body").innerHTML = "";
+    renderResults($("step3body"), rows);
   } catch (err) {
-    $("status").className = "msg err";
-    $("status").textContent = err.message;
+    $("runStatus").textContent = "";
+    renderRunError(err);
   } finally {
     $("run").disabled = false;
-    $("results").classList.remove("busy");
   }
 }
 
-/* ---------------- render ---------------- */
-function render(threshold) {
-  const good = rows.filter((r) => r.predicted_pic50 != null);
-  const anyMeasured = good.some((r) => r.measured_pic50 != null);
-
-  $("plotCard").classList.toggle("hidden", good.length === 0);
-  $("detailCard").classList.toggle("hidden", rows.length === 0);
-  $("tableCard").classList.toggle("hidden", rows.length === 0);
-
-  renderLegend(anyMeasured);
-  renderPlot(good);
-  renderDetails(threshold);
-  renderTable();
+function renderRunError(err) {
+  const box = $("step2body");
+  box.innerHTML = "";
+  box.appendChild(el("p", "msg err", err.message));
+  $("step3body").innerHTML = "";
+  $("step3").classList.add("idle");
 }
 
-// Legend is always present for 2+ series.
-function renderLegend(anyMeasured) {
-  const lg = $("legend");
-  lg.innerHTML = "";
+/* ---------------- step 2 render ---------------- */
+function renderCandidates(body) {
+  const box = $("step2body");
+  box.innerHTML = "";
+  $("step2note").textContent = `${rows.length} molecules screened against ${body.target.name}.`;
+  for (const r of rows) {
+    const p = r.prediction || {};
+    const c = el("div", "cand");
+    const nm = el("div", "name");
+    nm.style.cssText = "display:flex;gap:8px;align-items:center";
+    nm.appendChild(el("span", null, r.name));
+    if (p.pubchem_cid) {
+      const a = el("a", "tag", `CID ${p.pubchem_cid}`);
+      a.href = `https://pubchem.ncbi.nlm.nih.gov/compound/${p.pubchem_cid}`;
+      a.target = "_blank"; a.rel = "noopener"; a.style.textDecoration = "none";
+      nm.appendChild(a);
+    }
+    c.appendChild(nm);
+    if (r.note) c.appendChild(el("div", "why", r.note));
+    if (p.smiles) {
+      const sm = el("div", "smiles", p.smiles);
+      sm.title = p.smiles;
+      c.appendChild(sm);
+    }
+    box.appendChild(c);
+  }
+}
+
+/* ---------------- step 3 render ---------------- */
+function renderResults(box, data) {
+  const scored = data.filter((r) => r.prediction?.predicted_pic50 != null);
+  if (!scored.length) { box.appendChild(el("p", "msg", "Nothing could be scored.")); return; }
+  const anyMeasured = scored.some((r) => r.prediction.measured_pic50 != null);
+  box.appendChild(legend(anyMeasured));
+  box.appendChild(plot(scored));
+  box.appendChild(axis());
+  box.appendChild(details(data));
+  box.appendChild(tableView(data));
+}
+
+function legend(anyMeasured) {
+  const lg = el("div", "legend");
   const item = (color, label) => {
     const i = el("span", "item");
-    const s = el("span", "swatch ring");
+    const s = el("span", "swatch");
     s.style.background = color;
     i.append(s, el("span", null, label));
     return i;
   };
   lg.appendChild(item("var(--series-pred)", "Predicted"));
   if (anyMeasured) lg.appendChild(item("var(--series-meas)", "Measured (ChEMBL)"));
-  if (card) {
-    const hint = el("span", "item");
-    hint.style.color = "var(--text-muted)";
-    const td = card.training_data;
-    hint.textContent = `Measured compounds span pIC50 ${td.pic50_min}–${td.pic50_max}`;
-    lg.appendChild(hint);
-  }
+  const hint = el("span", "item");
+  hint.style.color = "var(--text-muted)";
+  hint.textContent = "Numbered rows are the shortlist";
+  lg.appendChild(hint);
+  return lg;
 }
 
-function renderPlot(good) {
-  const plot = $("plot");
-  plot.innerHTML = "";
-  const sorted = [...good].sort((a, b) => b.predicted_pic50 - a.predicted_pic50);
-
-  for (const r of sorted) {
-    const row = el("div", "plot-row");
-    const name = el("div", "name", r.query);
-    name.title = r.smiles || r.query;
+function plot(scored) {
+  const box = el("div");
+  for (const r of scored) {
+    const row = el("div", "plot-row" + (r.selected ? " sel" : ""));
+    row.appendChild(el("div", "rk", String(r.rank)));
+    const name = el("div", "name", r.name);
+    name.title = r.prediction.smiles || r.name;
     row.appendChild(name);
 
     const track = el("div", "track");
@@ -502,23 +542,44 @@ function renderPlot(good) {
       g.style.left = pos(t) + "%";
       track.appendChild(g);
     }
-
-    // measured first, so the predicted dot sits on top where they coincide
-    if (r.measured_pic50 != null) {
-      track.appendChild(dot(r, "meas", r.measured_pic50));
-    }
-    track.appendChild(dot(r, "pred", r.predicted_pic50));
+    if (r.prediction.measured_pic50 != null) track.appendChild(dot(r, "meas", r.prediction.measured_pic50));
+    track.appendChild(dot(r, "pred", r.prediction.predicted_pic50));
     row.appendChild(track);
 
-    row.appendChild(el("div", "num", fmt(r.predicted_pic50)));
-    const ic50 = el("div", "num soft ic50", r.predicted_ic50_nm == null ? "—" : nf.format(Math.round(r.predicted_ic50_nm)) + " nM");
-    row.appendChild(ic50);
-    plot.appendChild(row);
+    row.appendChild(el("div", "num", fmt(r.prediction.predicted_pic50)));
+    row.appendChild(el("div", "num soft ic50",
+      r.prediction.predicted_ic50_nm == null ? "—" : nf.format(Math.round(r.prediction.predicted_ic50_nm)) + " nM"));
+    box.appendChild(row);
   }
+  return box;
+}
 
-  // axis band is part of the container, so nothing gets a nested scroll
-  const ax = $("axis");
-  ax.innerHTML = "";
+function dot(r, kind, value) {
+  const hit = el("button", "hit");
+  hit.type = "button";
+  hit.style.left = pos(value) + "%";
+  hit.appendChild(el("span", `dot ${kind}`));
+  const p = r.prediction;
+  const isPred = kind === "pred";
+  const label = isPred ? "Predicted" : "Measured";
+  const ic50 = isPred && p.predicted_ic50_nm != null ? ` · ${nf.format(Math.round(p.predicted_ic50_nm))} nM` : "";
+  hit.setAttribute("aria-label", `${r.name}: ${label} pIC50 ${fmt(value)}${ic50}`);
+  const extra = isPred
+    ? `<div class="k">Nearest training compound: Tanimoto ${fmt(p.max_tanimoto)}</div>
+       <div class="k">${p.domain === "in" ? "Inside" : "Outside"} the applicability domain</div>
+       ${p.in_training_set ? '<div class="k">In the training set — prediction is optimistic</div>' : ""}`
+    : `<div class="k">Experimental value from ChEMBL${p.measured_count ? ` (${p.measured_count} measurement${p.measured_count > 1 ? "s" : ""})` : ""}</div>`;
+  const html = `<b>${r.name}</b><br>${label} pIC50 <b>${fmt(value)}</b>${ic50}${extra}`;
+  hit.addEventListener("mouseenter", (e) => showTip(e, html));
+  hit.addEventListener("focus", (e) => showTip(e, html));
+  hit.addEventListener("mouseleave", hideTip);
+  hit.addEventListener("blur", hideTip);
+  return hit;
+}
+
+function axis() {
+  const ax = el("div", "axis");
+  ax.appendChild(el("div"));
   ax.appendChild(el("div"));
   const ticks = el("div", "ticks");
   for (const t of AXIS.ticks) {
@@ -527,56 +588,25 @@ function renderPlot(good) {
     ticks.appendChild(d);
   }
   const mid = el("div");
-  mid.appendChild(ticks);
-  mid.appendChild(el("div", "axis-title", "predicted pIC50  (higher = more potent)"));
-  ax.appendChild(mid);
-  ax.appendChild(el("div"));
-  ax.appendChild(el("div"));
+  mid.append(ticks, el("div", "axis-title", "predicted pIC50 (higher = more potent)"));
+  ax.append(mid, el("div"), el("div"));
+  return ax;
 }
 
-function dot(r, kind, value) {
-  const hit = el("button", "hit");
-  hit.type = "button";
-  hit.style.left = pos(value) + "%";
-  const d = el("span", `dot ${kind}`);
-  hit.appendChild(d);
-
-  const isPred = kind === "pred";
-  const label = isPred ? "Predicted" : "Measured";
-  const ic50 = isPred && r.predicted_ic50_nm != null ? ` · ${nf.format(Math.round(r.predicted_ic50_nm))} nM` : "";
-  hit.setAttribute("aria-label", `${r.query}: ${label} pIC50 ${fmt(value)}${ic50}`);
-
-  const extra = isPred
-    ? `<div class="k">Nearest training compound: Tanimoto ${fmt(r.max_tanimoto)}</div>
-       <div class="k">${r.domain === "in" ? "Inside" : "Outside"} the applicability domain</div>
-       ${r.in_training_set ? '<div class="k">In the training set — prediction is optimistic</div>' : ""}`
-    : `<div class="k">Experimental value from ChEMBL${r.measured_count ? ` (${r.measured_count} measurement${r.measured_count > 1 ? "s" : ""})` : ""}</div>`;
-  const html = `<b>${r.query}</b><br>${label} pIC50 <b>${fmt(value)}</b>${ic50}${extra}`;
-
-  hit.addEventListener("mouseenter", (e) => showTip(e, html));
-  hit.addEventListener("focus", (e) => showTip(e, html));
-  hit.addEventListener("mouseleave", hideTip);
-  hit.addEventListener("blur", hideTip);
-  return hit;
-}
-
-function meter(label, value, max, fill, caption, threshold) {
+function meter(label, value, max, fill, caption, mark) {
   const m = el("div", "meter");
   const head = el("div", "head");
   head.appendChild(el("span", null, label));
-  const b = el("b", null, value == null ? "—" : fmt(value, value < 1 ? 3 : 2));
-  head.appendChild(b);
+  head.appendChild(el("b", null, value == null ? "—" : fmt(value, value < 1 ? 3 : 2)));
   m.appendChild(head);
-
   const bar = el("div", "bar");
   const f = el("div", "fill");
   f.style.width = Math.min(100, Math.max(0, ((value || 0) / max) * 100)) + "%";
   f.style.background = fill;
   bar.appendChild(f);
-  if (threshold != null) {
+  if (mark != null) {
     const mk = el("div", "mark");
-    mk.style.left = (threshold / max) * 100 + "%";
-    mk.title = `threshold ${threshold}`;
+    mk.style.left = (mark / max) * 100 + "%";
     bar.appendChild(mk);
   }
   m.appendChild(bar);
@@ -584,167 +614,202 @@ function meter(label, value, max, fill, caption, threshold) {
   return m;
 }
 
-function renderDetails(threshold) {
-  const box = $("details");
-  box.innerHTML = "";
-
-  for (const r of rows) {
-    const c = el("div", "detail");
+function details(data) {
+  const box = el("div", "details");
+  for (const r of data) {
+    const p = r.prediction;
+    if (!p || p.predicted_pic50 == null) continue;
+    const c = el("div", "detail" + (r.selected ? " sel" : ""));
     const head = el("header");
-
-    if (r.pubchem_cid) {
+    if (p.pubchem_cid) {
       const img = el("img", "struct");
-      img.src = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${r.pubchem_cid}/PNG?image_size=160x160`;
-      img.alt = `Structure of ${r.query}`;
+      img.src = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${p.pubchem_cid}/PNG?image_size=160x160`;
+      img.alt = `Structure of ${r.name}`;
       img.loading = "lazy";
       head.appendChild(img);
     }
     const title = el("div");
-    title.appendChild(el("h3", null, r.query));
-    if (r.smiles) title.appendChild(el("div", "smiles", r.smiles));
-    if (r.pubchem_cid) {
-      const link = el("div", "cap");
-      const a = el("a", null, `PubChem CID ${r.pubchem_cid}`);
-      a.href = `https://pubchem.ncbi.nlm.nih.gov/compound/${r.pubchem_cid}`;
-      a.target = "_blank"; a.rel = "noopener";
-      a.style.color = "var(--text-secondary)";
-      link.appendChild(a);
-      title.appendChild(link);
+    const h = el("h3");
+    h.appendChild(el("span", null, r.name));
+    if (r.selected) h.appendChild(el("span", "pill", `#${r.rank}`));
+    title.appendChild(h);
+    const pot = el("div", "why");
+    pot.style.fontSize = "13px";
+    pot.style.color = "var(--text-secondary)";
+    pot.textContent = `predicted pIC50 ${fmt(p.predicted_pic50)} · ${nf.format(Math.round(p.predicted_ic50_nm))} nM`;
+    title.appendChild(pot);
+    if (p.smiles) {
+      const sm = el("div", "smiles", p.smiles);
+      sm.title = p.smiles;
+      title.appendChild(sm);
     }
     head.appendChild(title);
     c.appendChild(head);
 
-    if (r.error) {
-      const b = el("div", "badges");
-      b.appendChild(badge("bad", "Could not resolve", r.error));
-      c.appendChild(b);
-      c.appendChild(el("div", "cap", r.error));
-      box.appendChild(c);
-      continue;
-    }
-
-    // status: icon + label, never colour alone
     const badges = el("div", "badges");
-    badges.appendChild(
-      r.domain === "in"
-        ? badge("good", "In domain", `max Tanimoto ${fmt(r.max_tanimoto)} >= ${threshold}`)
-        : badge("warn", "Outside domain", `max Tanimoto ${fmt(r.max_tanimoto)} < ${threshold} — extrapolation`)
-    );
-    if (r.in_training_set) badges.appendChild(badge("info", "In training set", "The model was fitted on this compound, so its prediction is optimistic."));
-    // Informational provenance, not a good/bad state - so neutral, not a status colour.
-    if (r.measured_pic50 != null) badges.appendChild(badge("info", `Measured ${fmt(r.measured_pic50)}`, "Experimental pIC50 from ChEMBL"));
-
-    const p = r.profile || {};
-    if (p.lipinski_violations != null) {
-      badges.appendChild(
-        p.lipinski_pass
-          ? badge("good", `Lipinski ${p.lipinski_violations}`, "At most one rule-of-five violation")
-          : badge("warn", `Lipinski ${p.lipinski_violations}`, "More than one rule-of-five violation")
-      );
+    badges.appendChild(p.domain === "in"
+      ? badge("good", "In domain", `max Tanimoto ${fmt(p.max_tanimoto)} >= ${threshold}`)
+      : badge("warn", "Outside domain", `max Tanimoto ${fmt(p.max_tanimoto)} < ${threshold} — extrapolation`));
+    if (p.in_training_set) badges.appendChild(badge("info", "In training set", "The model was fitted on this compound, so its prediction is optimistic."));
+    if (p.measured_pic50 != null) badges.appendChild(badge("info", `Measured ${fmt(p.measured_pic50)}`, "Experimental pIC50 from ChEMBL"));
+    const pr = r.profile || {};
+    if (pr.lipinski_violations != null) {
+      badges.appendChild(pr.lipinski_pass
+        ? badge("good", `Lipinski ${pr.lipinski_violations}`, "At most one rule-of-five violation")
+        : badge("warn", `Lipinski ${pr.lipinski_violations}`, "More than one rule-of-five violation"));
     }
-    if (p.veber_pass != null) {
-      badges.appendChild(p.veber_pass ? badge("good", "Veber pass", "Rotatable bonds <= 10 and TPSA <= 140")
-                                      : badge("warn", "Veber fail", "Rotatable bonds > 10 or TPSA > 140"));
+    if (pr.veber_pass != null) {
+      badges.appendChild(pr.veber_pass ? badge("good", "Veber pass") : badge("warn", "Veber fail"));
     }
     c.appendChild(badges);
 
-    // meters: single ratios against a limit
-    c.appendChild(meter(
-      "Similarity to training set", r.max_tanimoto, 1,
-      r.domain === "in" ? "var(--good)" : "var(--warning)",
-      `Tick marks the ${threshold} domain threshold`, threshold
-    ));
-    if (p.qed != null) {
-      c.appendChild(meter("Drug-likeness (QED)", p.qed, 1, "var(--series-pred)", "0 = poor, 1 = ideal"));
-    }
+    c.appendChild(meter("Similarity to training set", p.max_tanimoto, 1,
+      p.domain === "in" ? "var(--good)" : "var(--warning)",
+      `Tick marks the ${threshold} domain threshold`, threshold));
+    if (pr.qed != null) c.appendChild(meter("Drug-likeness (QED)", pr.qed, 1, "var(--series-pred)", "0 = poor, 1 = ideal"));
 
-    if (p.molecular_weight != null) {
+    if (r.citations?.length) {
+      const cites = el("div", "cites");
+      cites.style.marginTop = "10px";
+      for (const cit of r.citations) {
+        const a = el("a", "cite", `${cit.source}${cit.year ? " " + cit.year : ""} · ${cit.title}`);
+        if (cit.url) { a.href = cit.url; a.target = "_blank"; a.rel = "noopener"; }
+        a.title = cit.title;
+        cites.appendChild(a);
+      }
+      c.appendChild(cites);
+    }
+    if (pr.molecular_weight != null) {
       const facts = el("div", "cap");
-      facts.style.marginTop = "10px";
-      facts.textContent =
-        `MW ${p.molecular_weight} · cLogP ${p.clogp} · HBD ${p.hbd} · HBA ${p.hba} · ` +
-        `TPSA ${p.tpsa} · rot. bonds ${p.rotatable_bonds} · arom. rings ${p.aromatic_rings}`;
+      facts.style.cssText = "margin-top:10px;font-size:11px;color:var(--text-muted)";
+      facts.textContent = `MW ${pr.molecular_weight} · cLogP ${pr.clogp} · HBD ${pr.hbd} · HBA ${pr.hba} · TPSA ${pr.tpsa} · rot. bonds ${pr.rotatable_bonds}`;
       c.appendChild(facts);
     }
-
-    // nearest measured compounds, fetched on demand
-    const more = el("button");
-    more.textContent = "Nearest measured compounds";
-    more.style.marginTop = "12px";
-    more.style.fontSize = "12px";
-    const slot = el("div");
-    more.addEventListener("click", async () => {
-      if (slot.dataset.loaded) { slot.classList.toggle("hidden"); return; }
-      more.disabled = true;
-      try {
-        const res = await fetch(`${API}/api/v1/qsar/htert/dataset?compound=${encodeURIComponent(r.smiles || r.query)}&limit=3`);
-        const d = await res.json();
-        slot.innerHTML = "";
-        const t = el("table");
-        t.innerHTML = "<thead><tr><th>Measured neighbour</th><th>Tanimoto</th><th>pIC50</th></tr></thead>";
-        const tb = el("tbody");
-        for (const m of d.similar || []) {
-          const tr = el("tr");
-          const sm = el("td", "smiles", m.smiles.length > 28 ? m.smiles.slice(0, 28) + "…" : m.smiles);
-          sm.title = m.smiles;
-          tr.append(sm, el("td", "n", fmt(m.tanimoto, 3)), el("td", "n", fmt(m.measured_pic50)));
-          tb.appendChild(tr);
-        }
-        t.appendChild(tb);
-        slot.appendChild(t);
-        slot.dataset.loaded = "1";
-      } catch (err) {
-        slot.textContent = `Could not load neighbours: ${err.message}`;
-      } finally {
-        more.disabled = false;
-      }
-    });
-    c.append(more, slot);
     box.appendChild(c);
   }
+  return box;
 }
 
-function renderTable() {
-  const t = $("table");
+function tableView(data) {
+  const wrap = el("div");
+  wrap.style.marginTop = "22px";
+  wrap.appendChild(el("p", "msg", "Every value, in text:"));
+  const scroll = el("div", "scroll");
+  const t = el("table");
   const cols = [
-    ["Compound", (r) => r.query],
-    ["Resolved SMILES", (r) => r.smiles || "—"],
-    ["Pred. pIC50", (r) => fmt(r.predicted_pic50), 1],
-    ["Pred. IC50 (nM)", (r) => (r.predicted_ic50_nm == null ? "—" : nf.format(Math.round(r.predicted_ic50_nm))), 1],
-    ["Measured pIC50", (r) => fmt(r.measured_pic50), 1],
-    ["Max Tanimoto", (r) => fmt(r.max_tanimoto), 1],
-    ["Domain", (r) => (r.domain ? (r.domain === "in" ? "in" : "out") : "—")],
-    ["In training set", (r) => (r.error ? "—" : r.in_training_set ? "yes" : "no")],
+    ["#", (r) => r.rank, 1],
+    ["Compound", (r) => r.name],
+    ["Shortlisted", (r) => (r.selected ? "yes" : "no")],
+    ["Pred. pIC50", (r) => fmt(r.prediction.predicted_pic50), 1],
+    ["Pred. IC50 (nM)", (r) => nf.format(Math.round(r.prediction.predicted_ic50_nm)), 1],
+    ["Measured pIC50", (r) => fmt(r.prediction.measured_pic50), 1],
+    ["Max Tanimoto", (r) => fmt(r.prediction.max_tanimoto), 1],
+    ["Domain", (r) => r.prediction.domain ?? "—"],
     ["QED", (r) => fmt(r.profile?.qed, 3), 1],
-    ["MW", (r) => fmt(r.profile?.molecular_weight), 1],
-    ["cLogP", (r) => fmt(r.profile?.clogp), 1],
-    ["TPSA", (r) => fmt(r.profile?.tpsa, 1), 1],
-    ["Lipinski viol.", (r) => (r.profile?.lipinski_violations ?? "—"), 1],
+    ["Lipinski viol.", (r) => r.profile?.lipinski_violations ?? "—", 1],
     ["Veber", (r) => (r.profile?.veber_pass == null ? "—" : r.profile.veber_pass ? "pass" : "fail")],
-    ["Note", (r) => r.error || ""],
+    ["SMILES", (r) => r.prediction.smiles || "—"],
   ];
-  t.innerHTML = "";
   const thead = el("thead");
   const hr = el("tr");
   for (const [label] of cols) hr.appendChild(el("th", null, label));
   thead.appendChild(hr);
   const tb = el("tbody");
-  for (const r of rows) {
+  for (const r of data) {
+    if (r.prediction?.predicted_pic50 == null) continue;
     const tr = el("tr");
-    for (const [, get, numeric] of cols) tr.appendChild(el("td", numeric ? "n" : null, String(get(r))));
+    for (const [, get, n] of cols) tr.appendChild(el("td", n ? "n" : null, String(get(r))));
     tb.appendChild(tr);
   }
   t.append(thead, tb);
+  scroll.appendChild(t);
+  wrap.appendChild(scroll);
+  return wrap;
+}
+
+/* ---------------- literature tab: find molecules ---------------- */
+let litRows = [];
+
+async function findMolecules() {
+  const query = $("litq").value.trim();
+  const count = Math.max(1, Math.min(12, Number($("litn").value) || 6));
+  $("litgo").disabled = true;
+  $("litstatus").className = "msg";
+  $("litstatus").innerHTML = '<span class="spinner"></span>Searching papers, then extracting molecules — 15–25s.';
+  $("litresults").innerHTML = "";
+
+  try {
+    const url = `${API}/api/v1/pipeline/htert/literature-shortlist?count=${count}` +
+      (query ? `&query=${encodeURIComponent(query)}` : "");
+    const res = await fetch(url, { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+
+    litRows = body.entries.map((e) => ({
+      rank: e.rank, name: e.name, selected: e.selected, note: e.note,
+      citations: e.citations || [], prediction: e.prediction, profile: e.profile,
+    }));
+    $("litstatus").textContent =
+      `${body.papers_considered} papers read · ${litRows.length} small molecules found` +
+      (body.dropped.length ? ` · ${body.dropped.length} rejected` : "");
+    renderMolecules(body);
+  } catch (err) {
+    $("litstatus").className = "msg err";
+    $("litstatus").textContent = err.message;
+  } finally {
+    $("litgo").disabled = false;
+  }
+}
+
+function renderMolecules(body) {
+  const box = $("litresults");
+  box.innerHTML = "";
+  if (!litRows.length) {
+    box.appendChild(el("p", "msg", "No small molecules survived checking. Try another query."));
+  } else {
+    renderResults(box, litRows);
+  }
+
+  if (body.dropped?.length) {
+    const wrap = el("div");
+    wrap.style.marginTop = "22px";
+    const h = el("p", "msg");
+    h.style.cssText = "font-weight:600;color:var(--text-primary)";
+    h.textContent = "Rejected before scoring";
+    wrap.appendChild(h);
+    wrap.appendChild(el("p", "msg", "Proposals that could not be verified as scoreable small molecules."));
+    const t = el("table");
+    t.style.marginTop = "8px";
+    t.innerHTML = "<thead><tr><th>Proposed</th><th>Reason</th></tr></thead>";
+    const tb = el("tbody");
+    for (const d of body.dropped) {
+      const tr = el("tr");
+      tr.append(el("td", null, d.name), el("td", null, d.reason));
+      tb.appendChild(tr);
+    }
+    t.appendChild(tb);
+    wrap.appendChild(t);
+    box.appendChild(wrap);
+  }
+}
+
+/* ---------------- tabs ---------------- */
+function selectTab(name) {
+  const screen = name === "screen";
+  $("tab-screen").setAttribute("aria-selected", String(screen));
+  $("tab-lit").setAttribute("aria-selected", String(!screen));
+  $("view-screen").classList.toggle("hidden", !screen);
+  $("view-lit").classList.toggle("hidden", screen);
+
 }
 
 /* ---------------- wiring ---------------- */
+$("tab-screen").addEventListener("click", () => selectTab("screen"));
+$("tab-lit").addEventListener("click", () => selectTab("lit"));
+$("litgo").addEventListener("click", findMolecules);
+$("litq").addEventListener("keydown", (e) => { if (e.key === "Enter") findMolecules(); });
+
 $("run").addEventListener("click", run);
-$("input").addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run();
-});
-for (const b of document.querySelectorAll(".chip")) {
-  b.addEventListener("click", () => { $("input").value = b.dataset.ex; run(); });
-}
 $("theme").addEventListener("click", () => {
   const dark = document.documentElement.getAttribute("data-theme") === "dark"
     || (!document.documentElement.hasAttribute("data-theme") && matchMedia("(prefers-color-scheme: dark)").matches);
@@ -756,7 +821,7 @@ try {
   if (saved) document.documentElement.setAttribute("data-theme", saved);
 } catch {}
 
-loadModel().then(run);
+loadTargets();
 </script>
 </body>
 </html>

@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -29,7 +29,23 @@ class Settings(BaseSettings):
     # Optional. Raises the NCBI E-utilities limit from 3 to 10 requests/second.
     ncbi_api_key: str | None = None
     # Required for patent search. Request one at https://www.lens.org (Profile -> API).
-    lens_api_token: str | None = None
+    lens_api_token: str | None = Field(
+        None, validation_alias=AliasChoices("lens_api_token", "lens_api")
+    )
+
+    # --- LLM (candidate proposal) --------------------------------------------------
+    # Any OpenAI-compatible endpoint. Without a key the candidate step reports that it
+    # is not configured; everything else keeps working.
+    openai_api_key: str | None = None
+    openai_base_url: str = "https://api.openai.com/v1"
+    # OPENAI_MODEL is accepted as well, since that is the more familiar name.
+    llm_model: str = Field(
+        "gpt-4o-mini", validation_alias=AliasChoices("llm_model", "openai_model")
+    )
+    llm_timeout_seconds: float = 90.0
+    # How many papers are shown to the model, and how much of each abstract.
+    llm_max_documents: int = 24
+    llm_max_abstract_chars: int = 700
 
     # --- Literature search: behaviour ----------------------------------------------
     http_timeout_seconds: float = 20.0

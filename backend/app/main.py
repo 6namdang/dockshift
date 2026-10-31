@@ -15,7 +15,8 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes import health, literature, qsar
+from app.agent import PipelineService
+from app.api.routes import health, literature, pipeline, qsar
 from app.config import BACKEND_DIR, get_settings
 from app.literature import LiteratureSearchService
 from app.literature.http import build_http_client
@@ -33,8 +34,13 @@ def create_app() -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with build_http_client(settings) as client, mcp.session_manager.run():
-            app.state.literature_service = LiteratureSearchService(client, settings)
-            app.state.qsar_service = QsarService(client, settings)
+            literature_service = LiteratureSearchService(client, settings)
+            qsar_service = QsarService(client, settings)
+            app.state.literature_service = literature_service
+            app.state.qsar_service = qsar_service
+            app.state.pipeline_service = PipelineService(
+                client, literature_service, qsar_service, settings
+            )
             yield
 
     app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
@@ -50,6 +56,7 @@ def create_app() -> FastAPI:
     api = APIRouter(prefix="/api/v1")
     api.include_router(literature.router)
     api.include_router(qsar.router)
+    api.include_router(pipeline.router)
     app.include_router(health.router)
     app.include_router(api)
 
