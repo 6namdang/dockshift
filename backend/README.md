@@ -1,10 +1,11 @@
 # Dockshift backend
 
-FastAPI service + MCP server with three capabilities for drug-discovery agents:
+FastAPI service + MCP server with four capabilities for drug-discovery agents:
 
 1. **Literature search** across PubMed, bioRxiv, ChemRxiv, patents and PubChem
 2. **hTERT QSAR** — telomerase-inhibition potency prediction and drug-likeness profiling
-3. **Structural discovery** — external-engine integration for structure prediction, alignment,
+3. **Target screening** — fixed or literature-derived candidate shortlists ranked by QSAR
+4. **Structural discovery** — external-engine integration for structure prediction, alignment,
    pockets, docking, and staged molecular dynamics
 
 ## Setup
@@ -169,7 +170,33 @@ Two notes on reproducing the upstream numbers:
 
 ---
 
-# 3. Structural discovery
+# 3. Target screening pipeline
+
+The pipeline composes the existing literature and QSAR services without bypassing their scientific
+limits. `GET /api/v1/pipeline/targets` lists screenable targets. The following POST routes accept a
+`count` from 1 to 12:
+
+- `/api/v1/pipeline/{target_id}/shortlist` ranks the target's fixed candidate set without an LLM.
+- `/api/v1/pipeline/{target_id}/candidates` uses retrieved abstracts and an OpenAI-compatible JSON
+  endpoint to propose PubChem-resolvable small molecules, without scoring them.
+- `/api/v1/pipeline/{target_id}/literature-shortlist` proposes, profiles, predicts, and ranks
+  literature-grounded candidates.
+
+Literature proposal requires `OPENAI_API_KEY`. Configure `OPENAI_BASE_URL`, `LLM_MODEL` (or its
+`OPENAI_MODEL` alias), `LLM_TIMEOUT_SECONDS`, `LLM_MAX_DOCUMENTS`, and
+`LLM_MAX_ABSTRACT_CHARS` as needed. Proposals remain interpretations of retrieved literature, and
+QSAR scores remain model estimates.
+
+The MCP equivalents are `list_targets`, `shortlist_inhibitors`, and
+`find_candidates_in_literature`. For a structural handoff, map each selected entry's canonical
+`prediction.smiles` to `CandidateLigand.smiles`, with no more than six candidates, and preserve its
+prediction, profile, and citations in `qsar_metadata`. A fixed shortlist by itself does not satisfy
+the structural workflow's post-QSAR literature checkpoint; that checkpoint requires separate
+scientific review.
+
+---
+
+# 4. Structural discovery
 
 This subsystem is an executable integration layer around official scientific engines. It does
 not reimplement their algorithms, and it does not bundle executables, AlphaFold 3 model
@@ -265,8 +292,8 @@ The corresponding MCP tools are `structural_preflight`, `run_tmalign`, `run_alph
 `prepare_structural_ligand`, `prepare_structural_receptor`, `run_fpocket`,
 `compare_structural_pockets`, `generate_structural_pocket_box`,
 `create_structural_pocket_plan`, `run_vina_docking`, `run_structural_workflow`, and `run_gromacs`.
-The original six literature/QSAR tools are unchanged. These tools need no token over stdio; HTTP
-MCP requires its separate configured Bearer token.
+The six literature/QSAR tools and three target-screening tools are also available. These tools need
+no token over stdio; HTTP MCP requires its separate configured Bearer token.
 
 ## hTERT/tcTERT example flow
 

@@ -6,6 +6,7 @@ import secrets
 
 from fastapi import Header, HTTPException, Request, status
 
+from app.agent import PipelineService
 from app.literature import LiteratureSearchService
 from app.qsar import QsarService
 from app.structural import StructuralService
@@ -17,6 +18,10 @@ def get_literature_service(request: Request) -> LiteratureSearchService:
 
 def get_qsar_service(request: Request) -> QsarService:
     return request.app.state.qsar_service
+
+
+def get_pipeline_service(request: Request) -> PipelineService:
+    return request.app.state.pipeline_service
 
 
 def get_structural_service(request: Request) -> StructuralService:

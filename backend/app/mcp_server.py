@@ -27,6 +27,12 @@ from pydantic import Field, SecretStr
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from app.agent import (
+    DEFAULT_SHORTLIST,
+    PipelineService,
+    ShortlistResponse,
+    Target,
+)
 from app.config import Settings, get_settings
 from app.literature import (
     FullTextMode,
@@ -54,8 +60,8 @@ from app.structural import (
 from app.structural.models import FileInput, PocketBoxRequest
 
 INSTRUCTIONS = """\
-Tools for drug-discovery research: scientific literature search, plus an hTERT
-telomerase QSAR model.
+Tools for drug-discovery research: scientific literature search, target screening,
+hTERT telomerase QSAR, and an approval-gated structural discovery workflow.
 
 Workflow: call `search_literature` first. Results across PubMed, bioRxiv, ChemRxiv,
 patents and PubChem (compounds) come back merged and ranked by `confidence` (0-1,
@@ -64,13 +70,21 @@ automatically only for highly relevant, open-access hits. Call `get_full_text` w
 result `id` when you need the full paper/patent for a hit that didn't get it. Always
 cite the `url` or `doi` of the documents you use.
 
-hTERT QSAR: `predict_htert_activity` estimates telomerase-inhibition potency (pIC50) for
+hTERT QSAR: `list_targets` then `shortlist_inhibitors` scores a target's candidate
+molecules and ranks them by predicted potency. `predict_htert_activity` scores any
 compounds given by name or SMILES, `profile_compound` reports drug-likeness, and
 `search_htert_dataset` finds experimentally measured compounds. Predicted potency is a
 model estimate with roughly half-a-log-unit error: report it as a prediction, never as a
 measurement, say when a compound falls outside the applicability domain (`domain: "out"`),
 and prefer `measured_pic50` whenever it is present. Call `get_htert_model_info` for the
 model's performance and citation before making strong claims about its output.
+
+Target screening: `shortlist_inhibitors` ranks the fixed candidate set without claiming that
+literature review is complete. `find_candidates_in_literature` grounds proposals in retrieved
+abstracts before QSAR ranking and requires a configured OpenAI-compatible endpoint. For a
+structural handoff, use the canonical `prediction.smiles` for at most six selected ligands and
+preserve each entry's QSAR profile and citations as metadata; complete the structural workflow's
+literature checkpoint separately after scientific review.
 
 Structural discovery: call `structural_preflight` before jobs. Structural tools are thin
 adapters around configured TM-align, official AlphaFold 3, fpocket, Open Babel, AutoDock
@@ -94,6 +108,7 @@ class Services:
 
     literature: LiteratureSearchService
     qsar: QsarService
+    pipeline: PipelineService
     structural: StructuralService
 
 
@@ -101,9 +116,12 @@ class Services:
 async def _lifespan(_server: MCPServer) -> AsyncIterator[Services]:
     settings = get_settings()
     async with build_http_client(settings) as client:
+        literature = LiteratureSearchService(client, settings)
+        qsar = QsarService(client, settings)
         yield Services(
-            literature=LiteratureSearchService(client, settings),
-            qsar=QsarService(client, settings),
+            literature=literature,
+            qsar=qsar,
+            pipeline=PipelineService(client, literature, qsar, settings),
             structural=StructuralService(settings),
         )
 
@@ -473,6 +491,66 @@ async def run_gromacs(request: dict[str, Any], ctx: Context) -> dict[str, Any]:
     """Run local em/nvt/npt/md; review energy and convergence after the returned result."""
     result = await _services(ctx).structural.run_gromacs(GromacsRequest.model_validate(request))
     return result.model_dump(mode="json")
+
+
+@mcp.tool(title="List screenable targets")
+async def list_targets(ctx: Context) -> list[Target]:
+    """List protein targets that can be screened, and whether each has a QSAR model.
+
+    Only targets with `qsar_available` can have candidates scored, because scoring needs
+    a model trained on that target's measured compounds.
+    """
+    return _services(ctx).pipeline.targets()
+
+
+@mcp.tool(title="Shortlist inhibitor candidates")
+async def shortlist_inhibitors(
+    target_id: Annotated[
+        str, Field(description="Target id from list_targets, e.g. 'htert'.", min_length=1)
+    ],
+    ctx: Context,
+    count: Annotated[
+        int, Field(ge=1, le=12, description="How many candidates to shortlist (default 6).")
+    ] = DEFAULT_SHORTLIST,
+) -> ShortlistResponse:
+    """Score a target's candidate molecules with its QSAR model and rank them.
+
+    Returns every candidate ranked by predicted potency (pIC50), with `selected` marking
+    the top `count`. Each entry carries its predicted and, where ChEMBL has one, measured
+    potency, its applicability-domain status and its drug-likeness profile.
+
+    Scores are model estimates with roughly half a log unit of error: use them to rank
+    and triage, and say so rather than presenting them as measurements.
+    """
+    return await _services(ctx).pipeline.shortlist(target_id, count)
+
+
+@mcp.tool(title="Find inhibitor candidates in the literature")
+async def find_candidates_in_literature(
+    target_id: Annotated[
+        str, Field(description="Target id from list_targets, e.g. 'htert'.", min_length=1)
+    ],
+    ctx: Context,
+    count: Annotated[
+        int, Field(ge=1, le=12, description="How many molecules to shortlist (default 6).")
+    ] = DEFAULT_SHORTLIST,
+    query: Annotated[
+        str | None,
+        Field(description="Literature query to use; defaults to the target's own query."),
+    ] = None,
+) -> ShortlistResponse:
+    """Search the literature for a target, pull candidate small molecules out of it, and score them.
+
+    Searches PubMed, bioRxiv, ChemRxiv and patents for inhibitors of the target, has an LLM
+    propose compounds grounded in those abstracts, then keeps only proposals that resolve to
+    a real structure in PubChem and pass a small-molecule check (molecular weight, rotatable
+    bonds, heavy atoms). Survivors are scored with the target's QSAR model and ranked.
+
+    `dropped` lists what was rejected and why, and each entry carries the papers it came
+    from. Proposals are a reading of the literature and scores are model estimates: neither
+    is evidence of activity. Requires OPENAI_API_KEY.
+    """
+    return await _services(ctx).pipeline.literature_shortlist(target_id, count, query)
 
 
 def main() -> None:

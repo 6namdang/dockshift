@@ -29,18 +29,19 @@ hoang - computational biology, neuromodulation, mit, spaulding and harvard med s
 
 ## Demo flow
 
-Dockshift supports an hTERT discovery path: rank up to six molecules with the published QSAR
-model, complete a literature checkpoint, obtain or run standalone AF3 for an hTERT structure,
-align tcTERT to hTERT, compare fpocket pockets, create an immutable pocket-plan artifact, and
-obtain scientist approval bound to its SHA-256 before dual-target AutoDock Vina docking. Molecular
-dynamics remains a separate staged step because docking files do not contain valid ligand
-parameters, solvent, ions, or a complete topology. The current runner does not resume interrupted
-GROMACS runs.
+Dockshift supports an hTERT discovery path: use the target-screening pipeline to rank the fixed
+candidate set or discover literature-grounded molecules, select at most six candidates with the
+published QSAR model, complete a separate literature checkpoint, obtain or run standalone AF3 for
+an hTERT structure, align tcTERT to hTERT, compare fpocket pockets, create an immutable pocket-plan
+artifact, and obtain scientist approval bound to its SHA-256 before dual-target AutoDock Vina
+docking. Molecular dynamics remains a separate staged step because docking files do not contain
+valid ligand parameters, solvent, ions, or a complete topology. The current runner does not resume
+interrupted GROMACS runs.
 
 ## Architecture
 
-`backend/app/main.py` serves FastAPI and the MCP server. Literature, QSAR, and structural
-services share models between REST and MCP. Structural adapters call configured external
+`backend/app/main.py` serves FastAPI and the optionally mounted MCP server. Literature, QSAR,
+target-screening pipeline, and structural services share models between REST and MCP. Structural adapters call configured external
 scientific engines through shell-free asynchronous subprocesses with bounded streamed logs,
 timeouts, and process-group cleanup. One process-wide admission controller limits all REST, HTTP
 MCP, and stdio structural work, including geometry and planning. Each operation writes to a UUID
@@ -49,8 +50,11 @@ relative artifact references.
 
 ## Multi-agent orchestration
 
-MCP exposes the existing six literature/QSAR tools plus preflight, TM-align, official AlphaFold 3,
-preparation, fpocket, pocket comparison/box/planning, Vina, structural workflow, and GROMACS tools.
+MCP exposes six literature/QSAR tools, three target-screening tools, plus preflight, TM-align,
+official AlphaFold 3, preparation, fpocket, pocket comparison/box/planning, Vina, structural
+workflow, and GROMACS tools. A selected pipeline entry maps its canonical `prediction.smiles` to
+`CandidateLigand.smiles` for at most six ligands; preserve the QSAR prediction, profile, and
+citations in `qsar_metadata`. A fixed shortlist does not complete the literature checkpoint.
 The structural workflow requires exactly one to six candidates, a completed post-QSAR literature
 checkpoint, exact tcTERT/hTERT structures, and scientist approval referencing the immutable pocket
 proposal artifact and SHA-256. It verifies the proposal and current structure hashes, consumes the
@@ -82,7 +86,10 @@ shown below. Workspace Kiro configuration remains on local stdio.
 
 ## Environment variables
 
-Literature credentials and structural settings are documented in `backend/.env.example`. The
+Literature credentials, OpenAI-compatible target-proposal settings, and structural settings are
+documented in `backend/.env.example`. Candidate proposal uses `OPENAI_API_KEY`,
+`OPENAI_BASE_URL`, `LLM_MODEL` (or `OPENAI_MODEL`), `LLM_TIMEOUT_SECONDS`, `LLM_MAX_DOCUMENTS`,
+and `LLM_MAX_ABSTRACT_CHARS`. The
 structural executable settings are `TMALIGN_EXECUTABLE`, `FPOCKET_EXECUTABLE`, `VINA_EXECUTABLE`,
 `OBABEL_EXECUTABLE`, and `GROMACS_EXECUTABLE`. Official AlphaFold 3 runs additionally require
 `ALPHAFOLD3_PYTHON_EXECUTABLE`, `ALPHAFOLD3_SCRIPT`, `ALPHAFOLD3_MODEL_DIR`, and
@@ -98,8 +105,8 @@ MCP stdio remains available without either HTTP token. Runtime behavior uses sep
 
 ## API reference
 
-Literature routes are under `/api/v1/literature`, hTERT QSAR under `/api/v1/qsar/htert`, and
-structural routes under `/api/v1/structural`. Every structural REST route, including the live
+Literature routes are under `/api/v1/literature`, hTERT QSAR under `/api/v1/qsar/htert`, target
+screening under `/api/v1/pipeline`, and structural routes under `/api/v1/structural`. Every structural REST route, including the live
 capabilities probe, is disabled by default and requires Bearer authentication when enabled.
 Call `/api/v1/structural/capabilities` with that token before a structural run. See
 `backend/README.md` for every
@@ -108,6 +115,7 @@ hTERT/tcTERT flow.
 
 ## Project structure
 
+- `backend/app/agent/`: targets, LLM-backed candidate proposal, and QSAR shortlist pipeline
 - `backend/app/literature/`: source adapters, ranking, and full text
 - `backend/app/qsar/`: hTERT prediction, profiling, and model artifacts
 - `backend/app/structural/`: external-engine adapters, artifacts, geometry, and workflow
