@@ -19,6 +19,7 @@ cp .env.example .env         # then fill in CONTACT_EMAIL, LENS_API_TOKEN, ...
 uv run uvicorn app.main:app --reload            # REST + MCP on http://127.0.0.1:8000
 ```
 
+- **Frontend: <http://127.0.0.1:8000/ui/>**
 - OpenAPI docs: <http://127.0.0.1:8000/docs>
 - `GET /health` reports which sources are configured
 - MCP (Streamable HTTP): `http://127.0.0.1:8000/mcp`
@@ -162,9 +163,29 @@ Two notes on reproducing the upstream numbers:
   structures through PubChem, its Tanimoto and domain results match the **paper's Table 1**
   for all six compounds, where that upstream script does not.
 
+---
+
+# 3. Frontend
+
+A single static page (`frontend/index.html`) served by FastAPI at **`/ui/`** — no build
+step, no npm, no dependencies. Enter compound names or SMILES and it shows:
+
+- a **dot plot** of predicted pIC50 on a shared axis, with the measured value beside the
+  prediction where ChEMBL has one (dots rather than bars: pIC50 is a log scale with no
+  meaningful zero, and a truncated bar axis would mislead)
+- per-compound **structure images** (PubChem), applicability-domain and drug-likeness
+  **meters**, and status **badges** that always pair an icon with a label
+- a **table view** of every value, so nothing is reachable only by hover
+- light and dark themes, each with its own validated colour steps
+
+Because it is served same-origin it needs no CORS exemption. Opening the file directly
+also works: it falls back to `http://127.0.0.1:8000`.
+
 ## Layout
 
 ```
+frontend/
+  index.html           the whole UI: no build, no dependencies
 app/
   main.py              FastAPI app factory (+ mounts MCP at /mcp)
   config.py            Settings (env / .env)

@@ -13,9 +13,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import health, literature, qsar
-from app.config import get_settings
+from app.config import BACKEND_DIR, get_settings
 from app.literature import LiteratureSearchService
 from app.literature.http import build_http_client
 from app.mcp_server import mcp
@@ -51,6 +52,11 @@ def create_app() -> FastAPI:
     api.include_router(qsar.router)
     app.include_router(health.router)
     app.include_router(api)
+
+    # The frontend, served same-origin at /ui so it needs no CORS exemption.
+    frontend = BACKEND_DIR.parent / "frontend"
+    if (frontend / "index.html").is_file():
+        app.mount("/ui", StaticFiles(directory=frontend, html=True), name="frontend")
 
     # Mounted last at the root so FastAPI's own routes win; the MCP app only serves /mcp.
     app.mount("/", mcp_app)
