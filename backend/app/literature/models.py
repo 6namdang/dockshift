@@ -13,6 +13,7 @@ class Source(StrEnum):
     BIORXIV = "biorxiv"
     CHEMRXIV = "chemrxiv"
     PATENTS = "patents"
+    PUBCHEM = "pubchem"
 
 
 ALL_SOURCES: list[Source] = list(Source)

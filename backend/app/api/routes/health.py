@@ -18,5 +18,6 @@ async def health() -> dict[str, object]:
             "biorxiv": True,
             "chemrxiv": True,
             "patents": bool(settings.lens_api_token),
+            "pubchem": True,
         },
     }

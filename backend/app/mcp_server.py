@@ -38,12 +38,12 @@ INSTRUCTIONS = """\
 Tools for drug-discovery research: scientific literature search, plus an hTERT
 telomerase QSAR model.
 
-Literature: call `search_literature` first. Results across PubMed, bioRxiv, ChemRxiv and
-patents come back merged and ranked by `confidence` (0-1, lexical match of the query
-against title + abstract). Full text is attached automatically only for highly
-relevant, open-access hits. Call `get_full_text` with a result `id` when you need the
-full paper/patent for a hit that didn't get it. Always cite the `url` or `doi` of the
-documents you use.
+Workflow: call `search_literature` first. Results across PubMed, bioRxiv, ChemRxiv,
+patents and PubChem (compounds) come back merged and ranked by `confidence` (0-1,
+lexical match of the query against title + abstract). Full text is attached
+automatically only for highly relevant, open-access hits. Call `get_full_text` with a
+result `id` when you need the full paper/patent for a hit that didn't get it. Always
+cite the `url` or `doi` of the documents you use.
 
 hTERT QSAR: `predict_htert_activity` estimates telomerase-inhibition potency (pIC50) for
 compounds given by name or SMILES, `profile_compound` reports drug-likeness, and
@@ -106,7 +106,11 @@ async def search_literature(
     ctx: Context,
     sources: Annotated[
         list[Source] | None,
-        Field(description="Sources to search. Default: all (pubmed, biorxiv, chemrxiv, patents)."),
+        Field(
+            description=(
+                "Sources to search. Default: all (pubmed, biorxiv, chemrxiv, patents, pubchem)."
+            )
+        ),
     ] = None,
     max_results_per_source: Annotated[
         int, Field(ge=1, le=50, description="Max hits returned per source (default 10).")
@@ -127,10 +131,11 @@ async def search_literature(
         ),
     ] = FullTextMode.AUTO,
 ) -> SearchResponse:
-    """Search PubMed, bioRxiv, ChemRxiv and patents (Lens.org) in one call.
+    """Search PubMed, bioRxiv, ChemRxiv, patents (Lens.org) and PubChem in one call.
 
     Returns hits merged across sources, sorted by `confidence` (0-1). Each hit has title,
-    authors (inventors for patents), abstract, date, venue, DOI/URL and an `id` usable with
+    authors (inventors for patents; empty for PubChem compounds), abstract, date, venue,
+    DOI/URL and an `id` usable with
     `get_full_text`. Sources that fail or are not configured are listed in `errors`; the
     other sources' results are still returned.
     """

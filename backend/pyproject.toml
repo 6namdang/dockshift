@@ -1,7 +1,7 @@
 [project]
 name = "dockshift-backend"
 version = "0.1.0"
-description = "Dockshift backend: FastAPI service + MCP literature-search tools (PubMed, bioRxiv, ChemRxiv, patents)."
+description = "Dockshift backend: FastAPI service + MCP literature-search tools (PubMed, bioRxiv, ChemRxiv, patents, PubChem)."
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

@@ -2,7 +2,7 @@
 
 FastAPI service + MCP server with two capabilities for drug-discovery agents:
 
-1. **Literature search** across PubMed, bioRxiv, ChemRxiv and patents
+1. **Literature search** across PubMed, bioRxiv, ChemRxiv, patents and PubChem
 2. **hTERT QSAR** — telomerase-inhibition potency prediction and drug-likeness profiling
 
 ## Setup
@@ -54,6 +54,7 @@ Add it to Claude Code / Claude Desktop (stdio):
 | bioRxiv  | Europe PMC preprint index | no | when Europe PMC holds it (`inEPMC=Y`) |
 | ChemRxiv | Crossref (DOI prefix `10.26434`) | no | no (ChemRxiv PDFs sit behind Cloudflare) |
 | Patents  | Lens.org Patent API (global) | **`LENS_API_TOKEN`** | claims + description |
+| PubChem  | NCBI PUG-REST (compounds) | no (optional `NCBI_API_KEY`) | compound description |
 
 Why not the "obvious" APIs: bioRxiv's API has no keyword search; ChemRxiv's API is behind
 a Cloudflare bot challenge, and Europe PMC stopped indexing ChemRxiv in 2021; USPTO
@@ -197,7 +198,7 @@ app/
     models.py          Document / SearchRequest / SearchResponse
     http.py            shared httpx client + retries
     text.py            HTML/JATS -> plain text
-    sources/           pubmed.py, europepmc.py (bioRxiv), chemrxiv.py, patents.py
+    sources/           pubmed.py, europepmc.py (bioRxiv), chemrxiv.py, patents.py, pubchem.py
   qsar/
     service.py         resolve -> predict / profile / dataset search
     artifacts.py       lazy cached model + training fingerprints
