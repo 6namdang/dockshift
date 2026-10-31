@@ -8,6 +8,7 @@ FastAPI service + MCP server that lets agents search the literature:
 | bioRxiv  | Europe PMC preprint index | no | when Europe PMC holds it (`inEPMC=Y`) |
 | ChemRxiv | Crossref (DOI prefix `10.26434`) | no | no (ChemRxiv PDFs sit behind Cloudflare) |
 | Patents  | Lens.org Patent API (global) | **`LENS_API_TOKEN`** | claims + description |
+| PubChem  | NCBI PUG-REST (compounds) | no (optional `NCBI_API_KEY`) | compound description |
 
 Why not the "obvious" APIs: bioRxiv's API has no keyword search; ChemRxiv's API is behind
 a Cloudflare bot challenge, and Europe PMC stopped indexing ChemRxiv in 2021; USPTO
@@ -94,7 +95,7 @@ app/
     models.py          Document / SearchRequest / SearchResponse
     http.py            shared httpx client + retries
     text.py            HTML/JATS → plain text
-    sources/           pubmed.py, europepmc.py (bioRxiv), chemrxiv.py, patents.py
+    sources/           pubmed.py, europepmc.py (bioRxiv), chemrxiv.py, patents.py, pubchem.py
 ```
 
 ## Lint
