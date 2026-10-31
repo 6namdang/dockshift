@@ -6,6 +6,10 @@ __pycache__/
 .ruff_cache/
 .cache/
 
+# Structural workflow run directories and inputs
+.dockshift-runs/
+.dockshift-inputs/
+
 # Reference kits downloaded for reading, not part of this project
 science-kits-for-agents/
 science-kits-for-agents*.zip

@@ -1,9 +1,12 @@
 # Dockshift backend
 
-FastAPI service + MCP server with two capabilities for drug-discovery agents:
+FastAPI service + MCP server with four capabilities for drug-discovery agents:
 
 1. **Literature search** across PubMed, bioRxiv, ChemRxiv and PubChem
 2. **hTERT QSAR** — telomerase-inhibition potency prediction and drug-likeness profiling
+3. **Target screening** — fixed or literature-derived candidate shortlists ranked by QSAR
+4. **Structural discovery** — external-engine integration for structure prediction, alignment,
+   pockets, docking, and staged molecular dynamics
 
 ## Setup
 
@@ -16,15 +19,16 @@ cp .env.example .env         # optional; only the Literature workflow needs a ke
 ## Run
 
 ```bash
-uv run uvicorn app.main:app --reload            # REST + MCP on http://127.0.0.1:8000
+uv run uvicorn app.main:app --reload            # REST; HTTP MCP only when enabled
 ```
 
 - **Frontend: <http://127.0.0.1:8000/ui/>**
 - OpenAPI docs: <http://127.0.0.1:8000/docs>
 - `GET /health` reports which sources are configured
-- MCP (Streamable HTTP): `http://127.0.0.1:8000/mcp`
+- MCP (Streamable HTTP): absent by default; `MCP_HTTP_ENABLED=true` mounts authenticated `/mcp`
 
-MCP server on its own:
+MCP server on its own. Stdio is local and needs no HTTP token. Standalone HTTP requires
+`MCP_HTTP_ENABLED=true`, `MCP_HTTP_TOKEN`, and `Authorization: Bearer <token>` on every request:
 
 ```bash
 uv run python -m app.mcp_server                 # stdio
@@ -163,7 +167,191 @@ Two notes on reproducing the upstream numbers:
 
 ---
 
-# 3. Frontend
+# 3. Target screening pipeline
+
+The pipeline composes the existing literature and QSAR services without bypassing their scientific
+limits. `GET /api/v1/pipeline/targets` lists screenable targets. The following POST routes accept a
+`count` from 1 to 12:
+
+- `/api/v1/pipeline/{target_id}/shortlist` ranks the target's fixed candidate set without an LLM.
+- `/api/v1/pipeline/{target_id}/candidates` uses retrieved abstracts and an OpenAI-compatible JSON
+  endpoint to propose PubChem-resolvable small molecules, without scoring them.
+- `/api/v1/pipeline/{target_id}/literature-shortlist` proposes, profiles, predicts, and ranks
+  literature-grounded candidates.
+
+Literature proposal requires `OPENAI_API_KEY`. Configure `OPENAI_BASE_URL`, `LLM_MODEL` (or its
+`OPENAI_MODEL` alias), `LLM_TIMEOUT_SECONDS`, `LLM_MAX_DOCUMENTS`, and
+`LLM_MAX_ABSTRACT_CHARS` as needed. Proposals remain interpretations of retrieved literature, and
+QSAR scores remain model estimates.
+
+The MCP equivalents are `list_targets`, `shortlist_inhibitors`, and
+`find_candidates_in_literature`. For a structural handoff, map each selected entry's canonical
+`prediction.smiles` to `CandidateLigand.smiles`, with no more than six candidates, and preserve its
+prediction, profile, and citations in `qsar_metadata`. A fixed shortlist by itself does not satisfy
+the structural workflow's post-QSAR literature checkpoint; that checkpoint requires separate
+scientific review.
+
+---
+
+# 4. Structural discovery
+
+This subsystem is an executable integration layer around official scientific engines. It does
+not reimplement their algorithms, and it does not bundle executables, AlphaFold 3 model
+parameters, or sequence databases.
+
+## External prerequisites
+
+Install and license each tool according to its official project documentation:
+
+- [TM-align](https://zhanggroup.org/TM-align/) for protein structural alignment
+- [AlphaFold 3](https://github.com/google-deepmind/alphafold3) for optional local hTERT
+  prediction. Its model parameters have separate access terms and its databases are external.
+- [fpocket](https://github.com/Discngine/fpocket) for pocket detection
+- [AutoDock Vina](https://vina.scripps.edu/) for docking
+- [Open Babel](https://openbabel.org/docs/) for PDB/mmCIF conversion and PDBQT generation
+- [GROMACS](https://www.gromacs.org/) for molecular dynamics
+
+Configure paths in `backend/.env`:
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `STRUCTURAL_REST_ENABLED` | `false` | Opt in to structural REST job and mutation routes |
+| `STRUCTURAL_API_TOKEN` | unset | Required Bearer secret whenever structural REST is enabled |
+| `MCP_HTTP_ENABLED` | `false` | Independently opt in to mounted or standalone HTTP MCP |
+| `MCP_HTTP_TOKEN` | unset | Separate Bearer secret required whenever HTTP MCP is enabled |
+| `STRUCTURAL_MAX_CONCURRENT_JOBS` | `1` | One process-wide structural admission cap, bounded from 1 to 8 |
+| `STRUCTURAL_ARTIFACT_ROOT` | `.dockshift-runs` | UUID-isolated runtime outputs beneath `backend/` when relative |
+| `STRUCTURAL_INPUT_ROOT` | `.dockshift-inputs` | Dedicated caller-provided scientific inputs beneath `backend/` when relative |
+| `STRUCTURAL_COMMAND_TIMEOUT_SECONDS` | `1800` | Per-command timeout (1–86400 seconds) |
+| `STRUCTURAL_LOG_MAX_BYTES` | `10000000` | Hard bound for each streamed command log |
+| `TMALIGN_EXECUTABLE` | `TMalign` | TM-align executable or absolute executable path |
+| `FPOCKET_EXECUTABLE` | `fpocket` | fpocket executable |
+| `VINA_EXECUTABLE` | `vina` | AutoDock Vina executable |
+| `OBABEL_EXECUTABLE` | `obabel` | Open Babel executable |
+| `GROMACS_EXECUTABLE` | `gmx` | GROMACS command wrapper |
+| `ALPHAFOLD3_PYTHON_EXECUTABLE` | `python` | Python used for the official AF3 runner |
+| `ALPHAFOLD3_SCRIPT` | unset | Path to official `run_alphafold.py` |
+| `ALPHAFOLD3_MODEL_DIR` | unset | Licensed AF3 model-parameter directory |
+| `ALPHAFOLD3_DATABASE_DIR` | unset | AF3 database directory |
+
+Run `GET /api/v1/structural/capabilities` or MCP `structural_preflight` after setup. Missing
+executables and AF3 assets are reported individually. They do not prevent the literature and
+QSAR services from starting. AlphaFold 3 never falls back to another predictor. Dialect-v1
+protein entries must provide `unpaired_msa` and `paired_msa` together or omit both. All inline AF3
+text and canonical request metadata must remain within the approximately 3 MB request budget.
+Omit large MSAs/templates and let the official AF3 data pipeline generate them; staged file-backed
+AF3 inputs are not implemented. Standalone AF3 may include ligands and returns an explicit official
+root-level `top_ranked_structure` as well as per-sample `structure_artifacts`.
+
+Only the `local` execution backend is implemented. SSH, NVIDIA, Nebius, scheduler, container,
+and cloud execution are deployment responsibilities; this API does not claim to implement
+them.
+
+## Safety and artifacts
+
+Every operation creates a random UUID run directory beneath `STRUCTURAL_ARTIFACT_ROOT`.
+Responses return artifact-root-relative references. Inputs may reference an existing artifact or a
+file beneath the separate `STRUCTURAL_INPUT_ROOT`; arbitrary backend files, traversal, and symlink
+escapes are rejected. Both roots are created at startup and ignored by Git.
+
+Structural REST job and mutation routes are disabled by default. Set
+`STRUCTURAL_REST_ENABLED=true` and configure a strong `STRUCTURAL_API_TOKEN` to enable them,
+then send `Authorization: Bearer <token>`. HTTP MCP has a separate fail-closed boundary: set
+`MCP_HTTP_ENABLED=true` and a different strong `MCP_HTTP_TOKEN`, then authenticate every `/mcp`
+request with that Bearer token. The mounted endpoint is absent when disabled, and enabling it
+without a token refuses startup. Standalone `--http` uses the same policy. MCP stdio remains a
+local transport and needs no HTTP token. The live structural REST capabilities probe requires the
+structural REST Bearer token because it starts configured executables; responses do not reveal
+configured host paths.
+
+Configured executables are never accepted from request bodies. Commands use argument arrays
+with `asyncio` subprocesses, no shell, streamed size-bounded stdout/stderr logs, bounded timeouts,
+and process-group cleanup on timeout, cancellation, and wrappers whose leader exits early.
+`STRUCTURAL_MAX_CONCURRENT_JOBS` is one process-wide admission budget shared by every
+`StructuralService` instance and includes pocket comparison, box computation, and proposal
+creation. A failure returns a stable error code and relative log artifact references where
+available.
+
+## REST entry points
+
+All routes are under `/api/v1/structural`. Every route below, including the live capabilities
+probe, requires structural REST to be enabled and a valid Bearer token:
+
+- `POST /tmalign` — metrics, both normalized TM-scores, and A-to-B rigid transform
+- `POST /alphafold3` — official dialect-v1 JSON generation, configured local run, and explicit official root top model
+- `POST /prepare/ligand` and `/prepare/receptor`
+- `POST /fpocket`, `/pockets/compare`, `/pockets/box`, and `/pockets/plan`
+- `POST /vina/dock`
+- `POST /workflow` — bounded 1–6 candidate tcTERT/hTERT workflow
+- `POST /gromacs/run` — staged `em -> nvt -> npt -> md`
+
+The corresponding MCP tools are `structural_preflight`, `run_tmalign`, `run_alphafold3`,
+`prepare_structural_ligand`, `prepare_structural_receptor`, `run_fpocket`,
+`compare_structural_pockets`, `generate_structural_pocket_box`,
+`create_structural_pocket_plan`, `run_vina_docking`, `run_structural_workflow`, and `run_gromacs`.
+The six literature/QSAR tools and three target-screening tools are also available. These tools need
+no token over stdio; HTTP MCP requires its separate configured Bearer token.
+
+## hTERT/tcTERT example flow
+
+1. Rank one to six candidates with `predict_htert_activity`; record the returned QSAR fields in
+   each workflow candidate's `qsar_metadata`.
+2. Review literature and record citations/notes in `after_qsar_literature_checkpoint`.
+3. Provide a tcTERT PDB/mmCIF structure and a reviewed hTERT structure. If hTERT prediction is
+   needed, run standalone protein-only AF3 first, inspect its explicit `top_ranked_structure`, and
+   use that exact artifact as `htert_structure`. The workflow does not accept inline AF3 and never
+   substitutes a per-sample structure for the official root top model.
+4. Use individual `run_tmalign`, `run_fpocket`, `compare_structural_pockets`, and
+   `generate_structural_pocket_box` calls. Select exact returned pockets and boxes, then call
+   `create_structural_pocket_plan` with both structure inputs, the TM-align result or exact
+   transform, the complete selected Pocket objects, and exact boxes. Planning hashes both
+   structures and writes a canonical proposal artifact whose SHA-256 binds the geometry,
+   transform, boxes, comparison, and structure identities.
+5. Present the proposal artifact, SHA-256, selected IDs, exact boxes, and comparison to the
+   scientist. After explicit approval, submit `/workflow` with the same two structure references,
+   completed literature checkpoint, and a `pocket_approval` containing `proposal_artifact`,
+   `proposal_sha256`, `approved_by`, and a nonblank rationale. The workflow verifies the proposal
+   digest, strict schema, canonical encoding, and current structure hashes. It consumes the saved
+   pockets, transform, comparison, and boxes without rerunning AF3, TM-align, or fpocket. Partial
+   candidate artifacts and immutable submitted SMILES/SDF identity remain in the result.
+6. Inspect structures, protonation, metals, cofactors, pockets, boxes, and poses. Vina scores are
+   triage signals rather than measured binding energies.
+7. Separately parameterize the chosen protein-ligand complex with appropriate protein and ligand
+   force fields, charges, solvent, ions, and topology. GROMACS `includes` entries contain `source`
+   and a validated relative `destination`, such as `ligand/ligand.itp`, so topology layout is
+   preserved. Submit the reviewed bundle and four MDP files to `/gromacs/run`.
+8. After the GROMACS result, analyze energy and convergence outside this runner. Then call
+   literature tools and record citations and notes in the agent ledger before proposing another
+   chemical modification. GROMACS request/result models do not pretend a post-run checkpoint
+   existed before execution.
+
+The pocket composite is
+`0.35*exp(-centroid_distance/5Å) + 0.45*symmetric_atom_overlap + 0.20*size_ratio`, where
+`size_ratio` uses fpocket volume when both volumes exist and atom count otherwise. It is a
+deterministic geometry heuristic, not evidence that pockets are biologically equivalent.
+
+Ligand preparation uses RDKit to add hydrogens, generate a seeded 3D conformer, and request MMFF
+or UFF optimization, then Open Babel creates PDBQT. The result records convergence status;
+non-converged optimization retains geometry only with an explicit warning, and optimization
+exceptions are typed failures. Receptor cleanup can remove waters, heterogens, and secondary
+alternate locations before Open Babel creates rigid-receptor PDBQT. Users must inspect
+protonation, tautomer state, atom typing, metals, cofactors, missing residues, and retained waters.
+
+GROMACS consumes a fully prepared system bundle. The initial coordinate must have an allowlisted
+`.gro`, `.pdb`, `.g96`, `.brk`, or `.ent` suffix, which is preserved while staging; unsupported or
+missing suffixes fail before execution. Docking PDB/PDBQT files alone are not MD-ready, and this
+subsystem intentionally does not invent ligand parameters or topologies. Successful Vina results
+always include a non-empty pose artifact whose ATOM/HETATM-bearing model count and scores agree
+with the parsed ranked modes. Missing, malformed, or inconsistent pose output is a typed parse
+failure. The GROMACS runner calls
+`gmx grompp` then `gmx mdrun` for each supplied MDP stage, stops on the first failure, and reports
+stage artifacts/logs. It does not resume interrupted runs or derive energy/convergence metrics.
+Those analyses are downstream scientist-reviewed work; completion does not establish equilibration,
+convergence, or physical validity.
+
+---
+
+# 4. Frontend
 
 A single static page (`frontend/index.html`) served by FastAPI at **`/ui/`** — no build
 step, no npm, no dependencies. Enter compound names or SMILES and it shows:
@@ -187,8 +375,8 @@ frontend/
 app/
   main.py              FastAPI app factory (+ mounts MCP at /mcp)
   config.py            Settings (env / .env)
-  mcp_server.py        MCP server + all six tools
-  api/routes/          REST routes (health, literature, qsar)
+  mcp_server.py        MCP server + literature, QSAR, and structural tools
+  api/routes/          REST routes (health, literature, qsar, structural)
   literature/
     service.py         fan-out, merge, dedupe, score, auto full text
     scoring.py         lexical confidence
@@ -203,6 +391,17 @@ app/
     resolve.py         PubChem name -> SMILES
     models.py          prediction / profile / dataset schemas
     data/              vendored model + dataset + model card
+  structural/
+    service.py         REST/MCP facade and capability preflight
+    execution.py       local shell-free subprocess backend with timeouts/logs
+    artifacts.py       UUID workspaces and safe artifact references
+    alphafold3.py      official AF3 JSON/local-runner adapter
+    tmalign.py         TM-align execution and transform parsing
+    preparation.py     RDKit/Open Babel ligand and receptor preparation
+    pockets.py         fpocket parsing, comparison, docking-box geometry
+    docking.py         AutoDock Vina execution and score parsing
+    molecular_dynamics.py  staged GROMACS runner
+    workflow.py        bounded tcTERT/hTERT candidate orchestration
 scripts/
   vendor_qsar_model.py one-time artifact conversion from the upstream repo
 ```

@@ -13,6 +13,7 @@ The current target is **hTERT telomerase** (ChEMBL `CHEMBL2916`).
 
 - [Quick start](#quick-start)
 - [Workflows](#workflows)
+- [Structural discovery](#structural-discovery)
 - [The QSAR model](#the-qsar-model)
 - [Interfaces](#interfaces)
 - [Configuration](#configuration)
@@ -26,7 +27,9 @@ The current target is **hTERT telomerase** (ChEMBL `CHEMBL2916`).
 
 ## Quick start
 
-Requires Python 3.11 and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11 and [uv](https://docs.astral.sh/uv/). The structural subsystem
+additionally needs external engines, which are not bundled — see
+[Structural discovery](#structural-discovery).
 
 ```bash
 cd backend
@@ -40,7 +43,8 @@ uv run uvicorn app.main:app --reload
 | Web interface | <http://127.0.0.1:8000/ui/> |
 | API reference | <http://127.0.0.1:8000/docs> |
 | Health check | <http://127.0.0.1:8000/health> |
-| MCP endpoint | `http://127.0.0.1:8000/mcp` |
+| MCP (stdio) | `uv run python -m app.mcp_server` |
+| MCP over HTTP | `http://127.0.0.1:8000/mcp` — opt-in, see [Configuration](#configuration) |
 
 One process serves all of them: the frontend is a dependency-free static page served by
 FastAPI, so there is no separate build step.
@@ -88,6 +92,53 @@ A screen takes about 2.3 seconds once the library is cached, and needs no API ke
 
 The library is NVIDIA's nvMolKit benchmark set, fetched once (789 KB) and cached.
 
+### 4. Structural discovery
+
+Takes up to six candidates from any of the workflows above through a staged structural
+path: obtain or predict an hTERT structure with AlphaFold 3, align tcTERT to hTERT with
+TM-align, detect and compare pockets with fpocket, record an immutable pocket plan, and
+— only after scientist approval bound to that plan's SHA-256 — dock against both targets
+with AutoDock Vina.
+
+Molecular dynamics is a deliberately separate stage: docking output does not carry valid
+ligand parameters, solvent, ions or a complete topology, so a GROMACS run cannot simply
+follow on from it. Interrupted GROMACS runs are not resumed.
+
+---
+
+## Structural discovery
+
+### External engines
+
+The structural subsystem shells out to established scientific software. None of it is
+bundled, and AlphaFold 3 parameters and databases must be obtained separately under
+their own terms.
+
+[TM-align](https://zhanggroup.org/TM-align/) ·
+[AlphaFold 3](https://github.com/google-deepmind/alphafold3) ·
+[fpocket](https://github.com/Discngine/fpocket) ·
+[AutoDock Vina](https://vina.scripps.edu/) ·
+[Open Babel](https://openbabel.org/docs/) ·
+[GROMACS](https://www.gromacs.org/)
+
+Call `/api/v1/structural/capabilities`, or the `structural_preflight` tool, to see which
+engines are actually present. Missing prerequisites are reported rather than crashing
+the service.
+
+### Execution model
+
+Engines run as shell-free asynchronous subprocesses with bounded streamed logs, command
+timeouts and process-group cleanup. A single process-wide admission controller limits
+concurrent structural work across every transport. Each operation writes into a UUID
+directory under `backend/.dockshift-runs` and returns relative artifact references.
+
+Executable paths come only from settings, and input files only from the dedicated
+structural input root or an existing artifact root — never from arbitrary paths supplied
+by a caller. AlphaFold 3 has no silent fallback to another predictor.
+
+Only local process execution is implemented. Containers, schedulers, SSH and remote GPU
+backends are deployment concerns, behind the existing execution boundary.
+
 ---
 
 ## The QSAR model
@@ -129,13 +180,26 @@ and is not pinned to the library versions the model was saved with.
 | `GET` | `/api/v1/qsar/htert/dataset` | Nearest measured compounds |
 | `GET` | `/api/v1/qsar/htert/structure` | Structure as SVG, rendered locally |
 | `GET` | `/api/v1/qsar/htert/model` | Model provenance and performance |
+| `GET` | `/api/v1/structural/capabilities` | Which structural engines are available |
+| `POST` | `/api/v1/structural/*` | Alignment, prediction, pockets, docking, dynamics |
+
+Structural routes are disabled by default and require Bearer authentication when enabled; see [Configuration](#configuration).
 
 ### MCP
 
-The same capabilities are exposed as ten MCP tools: `list_targets`,
-`shortlist_inhibitors`, `screen_compound_library`, `find_candidates_in_literature`,
-`search_literature`, `get_full_text`, `predict_htert_activity`, `profile_compound`,
-`search_htert_dataset` and `get_htert_model_info`.
+Twenty-two MCP tools are exposed.
+
+Literature and QSAR: `search_literature`, `get_full_text`, `predict_htert_activity`,
+`profile_compound`, `search_htert_dataset`, `get_htert_model_info`.
+
+Candidate selection: `list_targets`, `shortlist_inhibitors`, `screen_compound_library`,
+`find_candidates_in_literature`.
+
+Structural: `structural_preflight`, `run_tmalign`, `run_alphafold3`,
+`prepare_structural_ligand`, `prepare_structural_receptor`, `run_fpocket`,
+`compare_structural_pockets`, `generate_structural_pocket_box`,
+`create_structural_pocket_plan`, `run_vina_docking`, `run_structural_workflow`,
+`run_gromacs`.
 
 Over stdio:
 
@@ -175,6 +239,29 @@ except where a workflow needs it.
 
 The Screen and Library workflows need no credentials.
 
+### Gated surfaces
+
+Two surfaces are disabled by default, and each refuses to start if enabled without its
+token.
+
+| Surface | Enable with | Authenticate with |
+|---|---|---|
+| Structural REST | `STRUCTURAL_REST_ENABLED=true` | `STRUCTURAL_API_TOKEN`, as `Authorization: Bearer` |
+| MCP over HTTP | `MCP_HTTP_ENABLED=true` | `MCP_HTTP_TOKEN`, as `Authorization: Bearer` |
+
+MCP over stdio needs neither, and is the usual way to connect a local client.
+
+### Structural settings
+
+Engine paths are `TMALIGN_EXECUTABLE`, `FPOCKET_EXECUTABLE`, `VINA_EXECUTABLE`,
+`OBABEL_EXECUTABLE` and `GROMACS_EXECUTABLE`. AlphaFold 3 additionally needs
+`ALPHAFOLD3_PYTHON_EXECUTABLE`, `ALPHAFOLD3_SCRIPT`, `ALPHAFOLD3_MODEL_DIR` and
+`ALPHAFOLD3_DATABASE_DIR`.
+
+Runtime behaviour is governed by `STRUCTURAL_ARTIFACT_ROOT`, `STRUCTURAL_INPUT_ROOT`,
+`STRUCTURAL_MAX_CONCURRENT_JOBS`, `STRUCTURAL_COMMAND_TIMEOUT_SECONDS` and
+`STRUCTURAL_LOG_MAX_BYTES`.
+
 ---
 
 ## Project layout
@@ -188,6 +275,7 @@ backend/
     agent/               Target definitions and the three workflows
     literature/          Source adapters, merging, lexical ranking
     qsar/                Model, featurisation, clustering, library screen
+    structural/          External-engine adapters, geometry, artifacts, workflow
       data/              Vendored model, dataset and model card
     api/routes/          REST routes
   scripts/
@@ -219,6 +307,10 @@ uv run ruff format .     # format
 - Candidates proposed from the literature reflect what the retrieved abstracts say, not
   evidence of activity.
 - Only hTERT has a trained model. Another target requires its own.
+- Docking scores and predicted structures are likewise estimates. A docking pose is a
+  hypothesis to test, not a measured affinity.
+- The structural workflow requires explicit scientist approval, bound to the SHA-256 of
+  an immutable pocket plan, before it will dock.
 - Nothing here has been experimentally validated.
 
 ---
