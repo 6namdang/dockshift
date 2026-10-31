@@ -5,7 +5,7 @@ aleena iraqui - computational biologist, machine learning, biochemist, northeast
 
 kiki chen - Architecture, design, workflow, pipeline, UI, UX - MS @ Harvard, MIT
 
-Klaus - Mathematics, accelerate scientific discovery, AI/ML, Senior @ UMASS Amherst
+Klaus - Mathematics, accelerate scientific discovery, AI/ML, Undergrad @ UMASS Amherst
 
 hoang - computational biology, neuromodulation, mit, spaulding and harvard med school
 
