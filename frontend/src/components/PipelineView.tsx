@@ -912,9 +912,9 @@ const CandidateTable: React.FC<{
                 <div className="flex items-center gap-2.5">
                   {r.smiles && (
                     <img
-                      src={structureSvgUrl(r.smiles, 56)}
-                      alt=""
-                      className="h-9 w-9 rounded bg-white shrink-0"
+                      src={structureSvgUrl(r.smiles, 96)}
+                      alt={`Structure of ${r.name}`}
+                      className="h-10 w-10 rounded bg-white shrink-0 object-contain"
                       loading="lazy"
                     />
                   )}

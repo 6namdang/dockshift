@@ -194,5 +194,7 @@ export const threeSiteDock = (compounds: Record<string, string>, radius = 18) =>
     body: JSON.stringify({ compounds }),
   });
 
+/** The route rejects anything under 80px, so clamp rather than let a caller 422. */
 export const structureSvgUrl = (smiles: string, size = 180) =>
-  `${BASE}/api/v1/qsar/htert/structure?size=${size}&smiles=${encodeURIComponent(smiles)}`;
+  `${BASE}/api/v1/qsar/htert/structure?size=${Math.min(600, Math.max(80, Math.round(size)))}` +
+  `&smiles=${encodeURIComponent(smiles)}`;
