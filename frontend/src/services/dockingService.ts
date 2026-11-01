@@ -7,8 +7,6 @@ import {
   Protein,
   Ligand,
   DockingResult,
-  DiscoveryPrompt,
-  GuidedChallenge,
   ResearchNote,
   LiteraturePaper
 } from '../types/docking';
@@ -420,93 +418,6 @@ export const INITIAL_DOCKING_RESULTS: Record<string, DockingResult> = {
   }
 };
 
-export const GUIDED_CHALLENGES: GuidedChallenge[] = [
-  {
-    id: 'challenge-allosteric',
-    title: 'Find the Allosteric Crevice',
-    level: 'Beginner',
-    question: 'Where does the small-molecule inhibitor BIBR1532 bind relative to the TERT catalytic triad?',
-    hint: 'Look at the orange molecule nestled between the cyan protein thumb and palm folds.',
-    explanation:
-      'BIBR1532 occupies a deep hydrophobic pocket formed by TERT residues Val867, Phe870, Leu977, and Met980. Crucially, it does NOT touch the catalytic aspartates (Asp712, 868, 869). This makes it a non-competitive allosteric inhibitor that blocks repeat addition processivity without interfering with standard dNTP chemistry.',
-    focusTarget: 'inhibitor',
-    actionLabel: 'Zoom into BIBR1532 Crevice'
-  },
-  {
-    id: 'challenge-template',
-    title: 'Trace the RNA–DNA Heteroduplex',
-    level: 'Intermediate',
-    question: 'How does the violet TERC RNA template align with the incoming gold DNA primer?',
-    hint: 'Toggle to view only the RNA (violet) and DNA (gold) components.',
-    explanation:
-      'Inside the catalytic cavity, the single-stranded DNA primer base-pairs directly with the internal TERC RNA template sequence 3\'-CAAUCCCAAUC-5\'. TERT wraps around this heteroduplex like a right hand, positioning the 3\'-hydroxyl of the primer right next to incoming magnesium ions.',
-    focusTarget: 'terc',
-    actionLabel: 'Inspect RNA–DNA Hybrid'
-  },
-  {
-    id: 'challenge-cancer',
-    title: 'Why Target Telomerase in Oncology?',
-    level: 'Beginner',
-    question: 'What gives cancer cells limitless replicative potential, and how do inhibitors halt this?',
-    hint: 'Think about what happens to normal somatic cells when chromosome ends erode.',
-    explanation:
-      'Normal human cells lack active telomerase and undergo senescence after ~50-70 divisions (the Hayflick limit). More than 85% of human tumors reactivate telomerase to continually rebuild their telomeres. By inhibiting telomerase, cancer cells experience catastrophic telomere attrition, DNA damage signaling, and selective apoptosis.',
-    focusTarget: 'all',
-    actionLabel: 'View Holoenzyme Complex'
-  }
-];
-
-export const DISCOVERY_PROMPTS: DiscoveryPrompt[] = [
-  {
-    id: 'prompt-support',
-    category: 'SUPPORT',
-    title: 'BIBR1532 Mechanism of Telomerase Inhibition',
-    question: 'How does BIBR1532 inhibit human telomerase without directly competing with dNTPs?',
-    context:
-      'Structure 9Q14 demonstrates that BIBR1532 binds to an allosteric pocket between the TERT thumb and palm domains, away from the catalytic triad (Asp712/868/869). Rather than blocking the first nucleotide addition, it impedes repeat addition processivity (RAP)—the essential ability of telomerase to synthesize multiple TTAGGG hexamer repeats on a single chromosome end.',
-    reflectionQuestion:
-      'Why does an allosteric inhibitor that selectively blocks processivity have a better therapeutic window than a catalytic chain terminator?',
-    suggestedAction: 'Click "Focus on inhibitor" in the 3D viewer to inspect how BIBR1532 sits snugly in the TERT thumb/palm pocket.',
-    suggestedNote: 'Experimental BIBR1532 mechanism (PDB 9Q14): The compound occupies an allosteric cleft in TERT, stabilizing a conformation that prevents DNA-RNA translocation without disrupting basal dNTP incorporation.'
-  },
-  {
-    id: 'prompt-challenge',
-    category: 'CHALLENGE',
-    title: 'Questioning Docking Score Assumptions in RNP Complexes',
-    question: 'What alternative explanations might account for a predicted docking score in telomerase?',
-    context:
-      'In computational docking against ribonucleoproteins (RNPs), scoring functions often over-reward electrostatic contacts near RNA phosphate backbones (like TERC) or miss the high desolvation penalty of displacement water networks. A candidate predicted to bind tightly in silico may lack selectivity in cellular assays.',
-    reflectionQuestion:
-      'Could a high docking affinity simply reflect non-specific electrostatic attraction to adjacent TERC RNA rather than genuine shape complementarity?',
-    suggestedAction: 'Toggle off the RNA view to see whether the proposed candidate pocket is formed purely by protein or depends on RNA interactions.',
-    suggestedNote: 'Critical docking question: In silico scores for candidate ligands must be cross-referenced against the experimental BIBR1532 binding footprint to verify genuine allosteric pocket occupation.'
-  },
-  {
-    id: 'prompt-surprise',
-    category: 'SURPRISE',
-    title: 'Impact of TERC RNA and DNA Substrate on the Allosteric Pocket',
-    question: 'How might RNA template dynamics and DNA translocation influence nearby small-molecule binding?',
-    context:
-      'Cryo-EM reveals that TERT undergoes coordinated breathing motions as the telomeric DNA primer translocates past the TERC RNA template. BIBR1532 binding wedges into the thumb-palm hinge, restricting this conformational flexibility and trapping the complex in an unproductive state.',
-    reflectionQuestion:
-      'Could we design "molecular glue" candidates that exploit both TERT residues and TERC RNA loops simultaneously to achieve picomolar selectivity?',
-    suggestedAction: 'Toggle both TERT and TERC together to inspect the extensive contact surface between the protein thumb and the RNA scaffold.',
-    suggestedNote: 'Novel inquiry: Investigating whether small-molecule scaffolds can act as dual-contact binders bridging TERT thumb residues and adjacent TERC RNA nucleotides.'
-  },
-  {
-    id: 'prompt-space',
-    category: 'SPACE',
-    title: 'Unbiased Structural Observation First',
-    question: 'What do you notice about the BIBR1532 binding cleft in TERT before viewing computational energy scores?',
-    context:
-      'Computational predictions can introduce cognitive anchors. Taking a step back to physically inspect the deep hydrophobic crevice (formed by Phe870, Leu977, Met980), the trajectory of the benzoic acid moiety, and the surrounding solvent channels provides invaluable structural intuition.',
-    reflectionQuestion:
-      'Which chemical substituents on BIBR1532 point towards solvent channels versus burying into the core hydrophobic pocket?',
-    suggestedAction: 'Use the 3D rotate and zoom controls to explore the boundary between the naphthalene ring and the surrounding TERT beta-hairpin.',
-    suggestedNote: 'Visual observation: The benzoic acid carboxylate of BIBR1532 is solvent-accessible near Arg1013, suggesting that modifying this terminus with polar linkers could tune pharmacokinetics without losing target affinity.'
-  }
-];
-
 export const INITIAL_RESEARCH_NOTES: ResearchNote[] = [
   {
     id: 'note-1',
@@ -615,7 +526,6 @@ class DockingService {
   private candidates: Ligand[] = [...SHORTLISTED_CANDIDATES];
   private dockingResults: Record<string, DockingResult> = { ...INITIAL_DOCKING_RESULTS };
   private notes: ResearchNote[] = [...INITIAL_RESEARCH_NOTES];
-  private challenges: GuidedChallenge[] = [...GUIDED_CHALLENGES];
   private papers: LiteraturePaper[] = [...CURATED_PAPERS];
   private listeners: Set<() => void> = new Set();
 
@@ -653,14 +563,6 @@ class DockingService {
 
   public async getAllDockingResults(): Promise<Record<string, DockingResult>> {
     return { ...this.dockingResults };
-  }
-
-  public getDiscoveryPrompts(): DiscoveryPrompt[] {
-    return DISCOVERY_PROMPTS;
-  }
-
-  public getGuidedChallenges(): GuidedChallenge[] {
-    return this.challenges;
   }
 
   public getCuratedPapers(): LiteraturePaper[] {

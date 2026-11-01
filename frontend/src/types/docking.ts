@@ -124,29 +124,6 @@ export interface DockingResult {
   notes?: string;
 }
 
-export type DiscoveryCategory = 'SUPPORT' | 'CHALLENGE' | 'SURPRISE' | 'SPACE';
-
-export interface DiscoveryPrompt {
-  id: string;
-  category: DiscoveryCategory;
-  title: string;
-  question: string;
-  context: string;
-  reflectionQuestion: string;
-  suggestedAction: string;
-  suggestedNote: string;
-}
-
-export interface GuidedChallenge {
-  id: string;
-  title: string;
-  level: 'Beginner' | 'Intermediate' | 'Advanced';
-  question: string;
-  hint: string;
-  explanation: string;
-  focusTarget: SelectedComponentType;
-  actionLabel: string;
-}
 
 export interface ResearchNote {
   id: string;

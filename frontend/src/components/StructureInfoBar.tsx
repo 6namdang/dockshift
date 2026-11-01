@@ -17,16 +17,12 @@ import { Protein } from '../types/docking';
 interface StructureInfoBarProps {
   protein: Protein;
   onFocusInhibitor?: () => void;
-  onToggleChallenge?: () => void;
-  isChallengeActive?: boolean;
   className?: string;
 }
 
 export const StructureInfoBar: React.FC<StructureInfoBarProps> = ({
   protein,
   onFocusInhibitor,
-  onToggleChallenge,
-  isChallengeActive = false,
   className = ''
 }) => {
   return (
@@ -69,21 +65,6 @@ export const StructureInfoBar: React.FC<StructureInfoBarProps> = ({
 
       {/* Right: Quick Action Controls */}
       <div className="flex items-center gap-2">
-        {onToggleChallenge && (
-          <button
-            onClick={onToggleChallenge}
-            title="Start or resume the guided beginner challenge"
-            className={`px-3 py-1 text-xs rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
-              isChallengeActive
-                ? 'bg-[#59C9C0] text-[#0B1118] font-semibold shadow-sm'
-                : 'bg-[#18232D] hover:bg-[#202F3C] text-[#59C9C0] border border-[#59C9C0]/30'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{isChallengeActive ? 'Playing Challenge' : '🎮 Play Challenge 01'}</span>
-          </button>
-        )}
-
         {onFocusInhibitor && (
           <button
             onClick={onFocusInhibitor}

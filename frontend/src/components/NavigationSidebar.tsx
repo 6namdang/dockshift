@@ -5,19 +5,20 @@
 
 import React from 'react';
 import {
-  Lightbulb,
   Crosshair,
   Sliders,
   GitCompare,
   Search,
   BookOpen,
   Keyboard,
-  ExternalLink
+  ExternalLink,
+  Workflow,
+  Activity
 } from 'lucide-react';
 import { DockShiftLogo } from './DockShiftLogo';
 
 export type NavigationTab =
-  | 'discover'
+  | 'pipeline'
   | 'screen'
   | 'playground'
   | 'compare'
@@ -45,25 +46,25 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
     desc: string;
   }[] = [
     {
-      id: 'discover',
+      id: 'pipeline',
       num: 1,
-      label: 'Discover',
-      icon: Lightbulb,
-      desc: 'Biology guide & challenges'
+      label: 'Pipeline',
+      icon: Workflow,
+      desc: 'Target to iteration, one run'
     },
     {
       id: 'screen',
       num: 2,
-      label: 'Screen',
+      label: 'Screening',
       icon: Crosshair,
-      desc: 'QSAR candidate screening'
+      desc: 'QSAR potency and domain'
     },
     {
       id: 'playground',
       num: 3,
-      label: 'Molecular Playground',
+      label: 'Structure',
       icon: Sliders,
-      desc: '3D Structure & component inspection'
+      desc: 'Receptor and pose inspection'
     },
     {
       id: 'compare',
@@ -77,10 +78,15 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       num: 5,
       label: 'Literature',
       icon: Search,
-      desc: 'Scientific literature query'
+      desc: 'Indexed source search'
     },
-    { id: 'agents', num: 6, label: 'Scientific Agents', icon: Crosshair,
-      desc: 'Runtime, evidence & Nebius models' }
+    {
+      id: 'agents',
+      num: 6,
+      label: 'Agents',
+      icon: Activity,
+      desc: 'Run state and remote engines'
+    }
   ];
 
   return (
@@ -88,26 +94,26 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       aria-label="Primary Navigation"
       className="w-64 flex-shrink-0 h-full bg-[#0B1118] border-r border-[#202F3C] flex flex-col justify-between text-[#E9F0F3] select-none z-30"
     >
-      {/* Top Section: Brand Header & Now Exploring Target Info */}
+      {/* Top Section: Brand Header & Active target Target Info */}
       <div className="flex flex-col">
         {/* Clean, Minimal Brand Lockup: Only 'DockShift', no subtitle or tagline */}
         <div className="px-4 py-3.5 border-b border-[#202F3C] flex items-center justify-between">
           <button
-            onClick={() => onSelectTab('playground')}
-            title="DockShift — Molecular Docking & Telomerase Investigation"
+            onClick={() => onSelectTab('pipeline')}
+            title="DockShift"
             className="flex items-center text-left cursor-pointer hover:opacity-95 transition"
           >
             <DockShiftLogo iconSize={28} textColor="#E9F0F3" />
           </button>
         </div>
 
-        {/* Now Exploring Section: Preserved Scientific Target Metadata */}
+        {/* Active target Section: Preserved Scientific Target Metadata */}
         <div className="p-3 border-b border-[#202F3C]">
           <div className="p-3 rounded-xl bg-[#18232D] border border-[#202F3C] shadow-sm">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[10px] font-mono tracking-wider uppercase text-[#59C9C0] font-semibold flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#59C9C0] animate-pulse" />
-                Now Exploring
+                Active target
               </span>
               <a
                 href="https://www.rcsb.org/structure/9Q14"

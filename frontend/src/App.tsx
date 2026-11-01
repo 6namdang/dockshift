@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { NavigationSidebar, NavigationTab } from './components/NavigationSidebar';
-import { DiscoverView } from './components/DiscoverView';
+import { PipelineView } from './components/PipelineView';
 import { ScreenView } from './components/ScreenView';
 import { MolecularViewer } from './components/MolecularViewer';
 import { MolecularInspector } from './components/MolecularInspector';
@@ -18,16 +18,12 @@ import {
   TARGET_TELOMERASE_9Q14,
   SHORTLISTED_CANDIDATES,
   INITIAL_DOCKING_RESULTS,
-  DISCOVERY_PROMPTS,
-  GUIDED_CHALLENGES,
   INITIAL_RESEARCH_NOTES
 } from './services/dockingService';
 import {
   Protein,
   Ligand,
   DockingResult,
-  DiscoveryPrompt,
-  GuidedChallenge,
   ResearchNote,
   ComponentVisibility,
   SelectedComponentType
@@ -35,17 +31,15 @@ import {
 import { X, BookOpen } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavigationTab>('playground');
+  const [activeTab, setActiveTab] = useState<NavigationTab>('pipeline');
   const [protein, setProtein] = useState<Protein>(TARGET_TELOMERASE_9Q14);
   const [candidates, setCandidates] = useState<Ligand[]>(SHORTLISTED_CANDIDATES);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('bibr1532');
   const [dockingResults, setDockingResults] = useState<Record<string, DockingResult>>(INITIAL_DOCKING_RESULTS);
-  const [discoveryPrompts, setDiscoveryPrompts] = useState<DiscoveryPrompt[]>(DISCOVERY_PROMPTS);
-  const [challenges, setChallenges] = useState<GuidedChallenge[]>(GUIDED_CHALLENGES);
   const [notes, setNotes] = useState<ResearchNote[]>(INITIAL_RESEARCH_NOTES);
   const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
   const [isLoadingScreening, setIsLoadingScreening] = useState<boolean>(false);
-  const [screeningSource, setScreeningSource] = useState<'backend' | 'demo'>('demo');
+  const [screeningSource, setScreeningSource] = useState<'backend' | 'demo'>('backend');
 
   // 3D Viewport Controls & Selections
   const [selectedComponent, setSelectedComponent] = useState<SelectedComponentType>('all');
@@ -63,15 +57,11 @@ export default function App() {
       const tgt = await dockingService.getTargetProtein();
       const cands = await dockingService.getCandidates();
       const docks = await dockingService.getAllDockingResults();
-      const prompts = dockingService.getDiscoveryPrompts();
-      const chs = dockingService.getGuidedChallenges();
       const initialNotes = dockingService.getNotes();
 
       setProtein(tgt);
       setCandidates(cands);
       setDockingResults(docks);
-      setDiscoveryPrompts(prompts);
-      setChallenges(chs);
       setNotes(initialNotes);
     };
 
@@ -119,7 +109,7 @@ export default function App() {
         switch (e.key) {
           case '1':
             e.preventDefault();
-            setActiveTab('discover');
+            setActiveTab('pipeline');
             setFocusedResidue(null);
             break;
           case '2':
@@ -244,17 +234,10 @@ export default function App() {
 
       {/* 2. Main Center Workspace */}
       <main className="flex-1 flex overflow-hidden relative">
-        {/* 1. DISCOVER TAB */}
-        {activeTab === 'discover' && (
-          <div className="flex-1 h-full">
-            <DiscoverView
-              challenges={challenges}
-              prompts={discoveryPrompts}
-              onSelectComponent={setSelectedComponent}
-              onFocusInhibitor={handleFocusInhibitor}
-              onNavigateToTab={(tab) => setActiveTab(tab)}
-              onAddNote={handleAddNote}
-            />
+        {/* 1. PIPELINE */}
+        {activeTab === 'pipeline' && (
+          <div className="flex-1 h-full min-h-0">
+            <PipelineView />
           </div>
         )}
 

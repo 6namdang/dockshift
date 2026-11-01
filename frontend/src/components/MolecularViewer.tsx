@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import { Protein, ComponentVisibility, SelectedComponentType, Ligand, DockingResult } from '../types/docking';
 import { StructureInfoBar } from './StructureInfoBar';
-import { PlaygroundChallenge } from './PlaygroundChallenge';
 import {
   renderBindingPocket,
   renderInteractions,
@@ -103,8 +102,6 @@ export const MolecularViewer: React.FC<MolecularViewerProps> = ({
   // Candidate exploration panel state (collapsed by default to maximize 3D viewer space)
   const [isCandidateDrawerOpen, setIsCandidateDrawerOpen] = useState<boolean>(false);
 
-  // Playground beginner challenge state
-  const [isChallengeOpen, setIsChallengeOpen] = useState<boolean>(false);
 
   const defaultDemonstrationCandidates: Ligand[] = [
     {
@@ -537,8 +534,6 @@ export const MolecularViewer: React.FC<MolecularViewerProps> = ({
       <StructureInfoBar
         protein={protein}
         onFocusInhibitor={handleFocusOnInhibitor}
-        onToggleChallenge={() => setIsChallengeOpen((prev) => !prev)}
-        isChallengeActive={isChallengeOpen}
       />
 
       {/* 2. Hero 3D Viewport Canvas */}
@@ -795,23 +790,6 @@ export const MolecularViewer: React.FC<MolecularViewerProps> = ({
             <Eye className="w-3.5 h-3.5 text-[#59C9C0]" />
             <span>{hoveredResidue}</span>
           </div>
-        )}
-
-        {/* 5. PLAYGROUND BEGINNER CHALLENGE CARD (Stage 1-4) */}
-        {isChallengeOpen && (
-          <PlaygroundChallenge
-            selectedComponent={selectedComponent}
-            onSelectComponent={onSelectComponent}
-            onFocusInhibitor={handleFocusOnInhibitor}
-            onAddNote={
-              onAddNote ||
-              ((_cat, _cont, _title) => console.log('Note saved from challenge'))
-            }
-            onNavigateToTab={onNavigateToTab}
-            candidates={candidates}
-            isOpen={isChallengeOpen}
-            onClose={() => setIsChallengeOpen(false)}
-          />
         )}
 
         {/* 6. UNOBTRUSIVE COMPONENT LEGEND (Bottom-Right) */}
