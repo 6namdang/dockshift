@@ -10,6 +10,7 @@ import { ScreenView } from './components/ScreenView';
 import { MolecularViewer } from './components/MolecularViewer';
 import { MolecularInspector } from './components/MolecularInspector';
 import { CompareView } from './components/CompareView';
+import { AgentRunsView } from './components/AgentRunsView';
 import { LiteratureView } from './components/LiteratureView';
 import { ResearchNotesView } from './components/ResearchNotesView';
 import {
@@ -133,6 +134,11 @@ export default function App() {
           case '4':
             e.preventDefault();
             setActiveTab('compare');
+            setFocusedResidue(null);
+            break;
+          case '6':
+            e.preventDefault();
+            setActiveTab('agents');
             setFocusedResidue(null);
             break;
           case '5':
@@ -327,6 +333,8 @@ export default function App() {
         )}
 
         {/* 5. LITERATURE TAB */}
+        {activeTab === 'agents' && <AgentRunsView />}
+
         {activeTab === 'literature' && (
           <div className="flex-1 h-full">
             <LiteratureView />

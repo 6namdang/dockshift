@@ -13,3 +13,5 @@ __pycache__/
 # Reference kits downloaded for reading, not part of this project
 science-kits-for-agents/
 science-kits-for-agents*.zip
+
+.dockshift-agent-runs/

@@ -1,0 +1,17 @@
+{
+  "source": "Agentic_System_Test",
+  "files_sha256": {
+    "src/contracts.py": "aab0eaa4dfdb768722ae0c58ca95376ed6d44e1c2b516b8bde02aab2da39c5e8",
+    "src/ledger.py": "3f90c874c6b9e326924beb61047b205b0d9d865ac007dfff68aef7500076834d",
+    "src/report/export.py": "d0045ef20ed26f562132162204ed45fe05597879734da6d6118da7d6837d1e00",
+    "src/adapters/base.py": "339008dcd2260ff8e9fef81907f2978356c3d255f23195cc7071f7c0a89d7762",
+    "src/adapters/chemistry.py": "31027eed8e9bdf971cc2e3ae2fd7567e561a1606d67c8ef37f515b0ab0668bf5",
+    "src/runtime/llm.py": "36478d4662feae7242bc5c9dfbf30e3feb77b4246225105daf40e36023a94437",
+    "src/runtime/engine.py": "486400c21b81746a948942530f989ac0e49dd33ba669bb7f3696f7e51e448596",
+    "src/agents/evidence.py": "53723c558f57d91dd6eb3bef93d494ef7209301f3e4fdf1bdfecf24eb114eabf",
+    "src/agents/complex.py": "2ed63422af3b07f1aa177d1bf75e8ad2154fcb62b635784dd56e0b669544952b"
+  },
+  "adaptation": "Selected runtime methods and scientific guards; local scientific implementations and historical artifacts are not copied.",
+  "source_commit": "93fd1fbe756de470744669fed9341038dcd7d6ee",
+  "source_note": "Digests identify the exact input files, including any uncommitted source changes. Imported files were adapted and formatted; these are upstream hashes."
+}

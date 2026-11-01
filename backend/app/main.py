@@ -16,8 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.agent import PipelineService
-from app.api.routes import health, literature, nebius, pipeline, qsar, structural
+from app.api.routes import agents, health, literature, nebius, pipeline, qsar, structural
 from app.config import BACKEND_DIR, get_settings
+from app.integration.service import IntegrationService
 from app.literature import LiteratureSearchService
 from app.literature.http import build_http_client
 from app.mcp_server import create_mcp_http_app, mcp
@@ -46,6 +47,13 @@ def create_app() -> FastAPI:
             )
             app.state.structural_service = StructuralService(settings)
             app.state.nebius_service = NebiusService(settings)
+            app.state.integration_service = IntegrationService(
+                settings,
+                literature_service,
+                qsar_service,
+                app.state.structural_service,
+                app.state.nebius_service,
+            )
             yield
 
     app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
@@ -64,6 +72,7 @@ def create_app() -> FastAPI:
     api.include_router(pipeline.router)
     api.include_router(structural.router)
     api.include_router(nebius.router)
+    api.include_router(agents.router)
     app.include_router(health.router)
     app.include_router(api)
 

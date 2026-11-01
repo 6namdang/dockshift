@@ -399,3 +399,44 @@ export function propertyLine(c: Candidate): string | null {
   if (p.molecular_weight == null) return null;
   return `MW ${p.molecular_weight} · cLogP ${p.clogp} · HBD ${p.hbd} · HBA ${p.hba} · TPSA ${p.tpsa} · rot. bonds ${p.rotatable_bonds}`;
 }
+
+/* Integrated scientific runtime. Tokens stay in memory and never enter URLs. */
+export interface AgentRunResult {
+  run_id: string;
+  status: 'COMPLETED' | 'BLOCKED' | 'FAILED';
+  llm_agents_invoked: number;
+  ledger_integrity: { verified: boolean; error: string | null };
+  agents: Array<{
+    agent: string; role: string; agent_status: string; scientific_status: string;
+    detail: string; llm_inference_calls: number;
+  }>;
+  computational_evidence: Array<{
+    agent: string; metric: string; value: number; unit: string; method: string;
+  }>;
+  scientific_review: string;
+  separation_statement: string;
+}
+
+export interface AgentCapabilities {
+  nebius: string;
+  error_code: string | null;
+  compute_enabled: boolean;
+  agents: Array<{ agent: string; tools: Array<{
+    name: string; available: boolean; input_schema: Record<string, unknown> | null;
+  }> }>;
+}
+
+export const fetchAgentCapabilities = () =>
+  call<AgentCapabilities>('/api/v1/agents/capabilities');
+
+export const runScientificAgents = (request: unknown, token: string) =>
+  call<AgentRunResult>('/api/v1/agents/runs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
+
+export const fetchAgentReport = (runId: string, token: string) =>
+  call<AgentRunResult>(`/api/v1/agents/runs/${encodeURIComponent(runId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });

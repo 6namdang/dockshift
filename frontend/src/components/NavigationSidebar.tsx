@@ -21,7 +21,8 @@ export type NavigationTab =
   | 'screen'
   | 'playground'
   | 'compare'
-  | 'literature';
+  | 'literature'
+  | 'agents';
 
 interface NavigationSidebarProps {
   activeTab: NavigationTab;
@@ -77,7 +78,9 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       label: 'Literature',
       icon: Search,
       desc: 'Scientific literature query'
-    }
+    },
+    { id: 'agents', num: 6, label: 'Scientific Agents', icon: Crosshair,
+      desc: 'Runtime, evidence & Nebius models' }
   ];
 
   return (
@@ -221,7 +224,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
             <Keyboard className="w-3 h-3 text-[#59C9C0]" />
             <span>Shortcuts:</span>
           </span>
-          <span className="font-mono">Press 1-5 to switch</span>
+          <span className="font-mono">Press 1-6 to switch</span>
         </div>
       </div>
     </aside>

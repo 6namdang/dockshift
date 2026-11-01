@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     )
     nebius_timeout_seconds: float = 180.0
 
+    # --- Integrated scientific runtime ---------------------------------------
+    agent_artifact_root: Path = Path(".dockshift-agent-runs")
+    agent_compute_enabled: bool = False
+    # Optional exact tool name, configured only after reviewing Nebius discovery.
+    agent_nebius_binder_tool: str | None = None
+
     # --- Structural discovery -------------------------------------------------
     # REST execution and HTTP MCP are independently opt-in. MCP stdio remains local.
     structural_rest_enabled: bool = False

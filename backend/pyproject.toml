@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
     "httpx>=0.27",
+    "jsonschema>=4.23",
     "pydantic>=2.7",
     "pydantic-settings>=2.3",
     "mcp>=2.0",
@@ -21,6 +22,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "ruff>=0.5",
+    "pytest>=8",
 ]
 
 [tool.uv]
@@ -34,3 +36,7 @@ extend-exclude = ["science-kits-for-agents"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
+
+# Preserve imported source contracts and native runtime semantics.
+[tool.ruff.lint.per-file-ignores]
+"app/integration/scienceclaw/**" = ["E501", "UP042"]

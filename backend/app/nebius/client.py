@@ -13,10 +13,11 @@ artifact. Small jobs can instead pass ``wait_seconds`` and get the result inline
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -40,6 +41,7 @@ class NebiusError(Exception):
 class RemoteTool:
     name: str
     description: str
+    input_schema: dict[str, Any] = field(default_factory=dict)
 
 
 class NebiusClient:
@@ -88,10 +90,17 @@ class NebiusClient:
         except Exception as exc:
             raise NebiusError(f"Could not reach the Nebius MCP server: {exc}") from exc
         return [
-            RemoteTool(name=t.name, description=(t.description or "").strip()) for t in result.tools
+            RemoteTool(
+                name=t.name,
+                description=(t.description or "").strip(),
+                input_schema=t.input_schema,
+            )
+            for t in result.tools
         ]
 
-    async def call(self, tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    async def call(
+        self, tool: str, arguments: dict[str, Any], *, allow_pending: bool = False
+    ) -> dict[str, Any]:
         """Call one remote tool and return its structured result.
 
         Raises NebiusError when the server reports the call as failed, so a caller never
@@ -107,6 +116,36 @@ class NebiusClient:
 
         if result.is_error:
             text = " ".join(getattr(block, "text", "") for block in (result.content or [])).strip()
+            # The integrated runtime can retain accepted-operation envelopes even
+            # when MCP marks them as errors. Existing callers retain their behavior.
+            if allow_pending:
+                payload = result.structured_content
+                if payload is None:
+                    try:
+                        payload = json.loads(text)
+                    except ValueError:
+                        payload = None
+                if isinstance(payload, dict):
+                    operation = payload.get("operation") or {}
+                    envelope = payload.get("error") or {}
+                    if isinstance(operation, dict) and isinstance(envelope, dict):
+                        code = str(
+                            envelope.get("code")
+                            or operation.get("status")
+                            or payload.get("status")
+                            or ""
+                        ).upper()
+                        if code in {
+                            "ADMISSION_LIMIT_REACHED",
+                            "OPERATION_PENDING",
+                            "OPERATION_NOT_READY",
+                            "RESULT_NOT_READY",
+                            "ACCEPTED",
+                            "RUNNING",
+                            "QUEUED",
+                            "PENDING",
+                        }:
+                            return payload
             raise NebiusError(f"{tool} reported an error: {text[:400] or 'no detail given'}")
 
         if result.structured_content is not None:

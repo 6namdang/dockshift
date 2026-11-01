@@ -342,3 +342,10 @@ Bioactivity data from [ChEMBL](https://www.ebi.ac.uk/chembl/); compound structur
 [PubChem](https://pubchem.ncbi.nlm.nih.gov/). The similarity-screening and clustering
 approach follows NVIDIA's `science-kits-for-agents` `screen-molecules` kit, and the
 compound library is its nvMolKit benchmark set.
+
+## Integrated scientific agents
+
+The A1–A7 runtime (including A5a/A5b), Nebius model bindings, evidence ledger,
+FastAPI endpoints and React Scientific Agents view are described in
+[the integration guide](docs/AGENT_INTEGRATION.md). Scientific compute is disabled
+by default; existing workflows and historical results remain available.
