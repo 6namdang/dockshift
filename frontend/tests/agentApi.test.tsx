@@ -106,3 +106,45 @@ test('original navigation and screening components retain the team workflow', as
   assert.match(screen, /QSAR Candidate Screening Workflow/);
   assert.doesNotMatch(screen, /hERG|ADMET/);
 });
+
+test('collective controls expose non-computational preflight and explicit zero budget', async () => {
+  const { CollectiveControls } = await import('../src/integration/CollectiveWorkflow');
+  const html = renderToStaticMarkup(<CollectiveControls token="" onStarted={() => {}} />);
+  assert.match(html, /small molecule and protein biologic branches/);
+  assert.match(html, /Check prerequisites and Nebius contracts/);
+  assert.match(html, /max_submissions/);
+  assert.match(html, /Missing Token Factory access stays blocked/);
+});
+
+test('collective preflight calls only its authenticated read-only endpoint', async () => {
+  const { preflightResearch } = await import('../src/integration/researchApi');
+  const original = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ submission_performed: false, status: 'BLOCKED' }));
+  };
+  try {
+    await preflightResearch({ workflow: 'collective', budget: { max_submissions: 0 } }, 'test-token');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, '/api/v1/agents/preflight');
+    assert.equal(new Headers(calls[0].init?.headers).get('Authorization'), 'Bearer test-token');
+    assert.ok(!calls[0].url.includes('test-token'));
+  } finally { globalThis.fetch = original; }
+});
+
+test('collective report separates branch blockers and preserves native model confidence', async () => {
+  const { CollectiveReport } = await import('../src/integration/CollectiveWorkflow');
+  const html = renderToStaticMarkup(<CollectiveReport runId="agents-fixture" token="" output={{
+    branches: { small_molecule: { status: 'BLOCKED', missing_agents: ['A6'], scientific_acceptance: 'REVIEW_REQUIRED' },
+      biologic: { status: 'BLOCKED', missing_agents: ['A4', 'A5b', 'A6'], scientific_acceptance: 'REVIEW_REQUIRED' } },
+    steps: { complex: { agent: 'A5b', branch: 'biologic', status: 'SUCCEEDED', tool: 'boltz2_predict_native',
+      validation: { kind: 'complex', model_id: 'boltz2', model_version: 'SYNTHETIC-TEST-ONLY', native_confidence: { iptm: [.8] },
+        limitations: ['Synthetic fixture; no binding claim'] } } },
+  }} />);
+  assert.match(html, /Small molecule: BLOCKED/);
+  assert.match(html, /Protein biologic: BLOCKED/);
+  assert.match(html, /iptm/);
+  assert.match(html, /Synthetic fixture; no binding claim/);
+  assert.doesNotMatch(html, /affinity =|pIC50 =|converged/);
+});

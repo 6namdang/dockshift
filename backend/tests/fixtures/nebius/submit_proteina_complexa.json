@@ -1,0 +1,402 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "$id": "https://fs2-serve.nebius.ai/schema/scientific-run-request/v1",
+  "title": "Scientific batch run request",
+  "description": "User-authored request for POST /v1/models/{model_id}:submit. Idempotency is supplied in the Idempotency-Key HTTP header; queue, image, command, environment, and accelerator placement remain operator-owned.",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "operation",
+    "service_class",
+    "input_manifest",
+    "parameters"
+  ],
+  "properties": {
+    "schema": {
+      "const": "fs2-serve.nebius.ai/scientific-run-request/v1"
+    },
+    "operation": {
+      "enum": [
+        "design-binders"
+      ]
+    },
+    "service_class": {
+      "enum": [
+        "customer-batch",
+        "bulk-backfill"
+      ]
+    },
+    "input_manifest": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "parameters": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "https://fs2-serve.nebius.ai/schema/proteina-complexa-parameters/v1",
+      "title": "Proteina-Complexa scientific run parameters",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant",
+        "run_name",
+        "seed",
+        "num_samples",
+        "diffusion_steps"
+      ],
+      "properties": {
+        "variant": {
+          "enum": [
+            "protein-target",
+            "ligand-target",
+            "ame"
+          ]
+        },
+        "target_id": {
+          "type": "string",
+          "description": "Optional named upstream target configuration for the selected variant. Choose either target_id or an explicit target. The target_catalog describes each named configuration and its required bundle_path; names are not inferred from filenames.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+        },
+        "run_name": {
+          "type": "string",
+          "pattern": "^[a-z0-9](?:[-a-z0-9]*[a-z0-9])?$",
+          "maxLength": 63
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "num_samples": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024
+        },
+        "diffusion_steps": {
+          "type": "integer",
+          "description": "Required explicit denoising step count; never silently replaced. The pinned upstream model_sampling baseline is 400 steps. Its 100-step example is a quick local test, not equivalent quality: shorter sampling trades runtime for potentially severe raw-backbone distortion, particularly for ligand-target and AME. Choose explicitly and inspect raw/refolded geometry; successful execution does not guarantee useful designs. This API does not infer a default.",
+          "minimum": 1,
+          "maximum": 2000
+        },
+        "target": {
+          "description": "Explicit customer target configuration. This replaces target_id and accepts any structure and constraints supported by the selected upstream variant; it is not restricted to target_catalog examples. Upload bytes using the normal tenant-owned target-bundle artifact and manifest.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bundle_path": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$",
+              "maxLength": 512,
+              "description": "Relative path to the target structure inside your authenticated target-bundle tar (for example inputs/my-target.pdb or inputs/my-target.cif). No absolute paths, parent traversal, links, or .fs2 control paths."
+            },
+            "binder_length": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 2,
+              "items": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "description": "Explicit fixed length [N] or inclusive range [minimum, maximum]. Equal endpoints also select a fixed length. No scientific length is inferred from a catalog."
+            },
+            "pdb_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional reference identifier; does not fetch or replace the supplied structure."
+            },
+            "target_input": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$",
+              "description": "Protein chains/residue ranges from the supplied structure, for example A1-150, A1-100,B1-50, or A. All hotspots must lie in the selected residues."
+            },
+            "hotspot_residues": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$"
+              },
+              "uniqueItems": true,
+              "default": [],
+              "description": "Exact chain/residue identifiers, for example A45 and B67. Empty means no hotspot guidance. Missing or ambiguous requested hotspots fail explicitly."
+            },
+            "ligand": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$"
+                  },
+                  "uniqueItems": true
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ligand residue name or list of names. With ligand_only=false, select the named residues from the supplied structure. With ligand_only=true, the entire file is the ligand; names do not crop it."
+            },
+            "ligand_only": {
+              "type": "boolean",
+              "description": "True uses the entire input structure as the ligand. False selects target.ligand residue names."
+            },
+            "SMILES": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Single-ligand SMILES used when use_bonds_from_file=false."
+            },
+            "use_bonds_from_file": {
+              "type": "boolean",
+              "default": true,
+              "description": "Use input-file bonds. False requires SMILES and one ligand."
+            },
+            "contig_atoms": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^(?![\\s\\S]*\\$\\{)[^\\x00-\\x1f]+$",
+              "description": "Explicit fixed motif atoms, for example A64: [O, C]; A86: [CB, CA, N, C]. Every selected atom must exist in the supplied structure."
+            }
+          },
+          "required": [
+            "bundle_path",
+            "binder_length"
+          ]
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "target_id"
+          ],
+          "not": {
+            "required": [
+              "target"
+            ]
+          }
+        },
+        {
+          "required": [
+            "target"
+          ],
+          "not": {
+            "required": [
+              "target_id"
+            ]
+          }
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "variant": {
+                "const": "protein-target"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "bundle_path",
+                  "binder_length",
+                  "target_input"
+                ],
+                "properties": {
+                  "bundle_path": {},
+                  "binder_length": {},
+                  "pdb_id": {},
+                  "target_input": {},
+                  "hotspot_residues": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variant": {
+                "const": "ligand-target"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "bundle_path",
+                  "binder_length",
+                  "ligand",
+                  "ligand_only"
+                ],
+                "properties": {
+                  "bundle_path": {},
+                  "binder_length": {},
+                  "pdb_id": {},
+                  "ligand": {},
+                  "ligand_only": {},
+                  "SMILES": {},
+                  "use_bonds_from_file": {}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variant": {
+                "const": "ame"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "target": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "bundle_path",
+                  "binder_length",
+                  "ligand",
+                  "contig_atoms"
+                ],
+                "properties": {
+                  "bundle_path": {},
+                  "binder_length": {},
+                  "pdb_id": {},
+                  "ligand": {
+                    "type": [
+                      "string",
+                      "array"
+                    ],
+                    "minItems": 1
+                  },
+                  "contig_atoms": {}
+                }
+              }
+            }
+          }
+        }
+      ],
+      "examples": [
+        {
+          "variant": "protein-target",
+          "target": {
+            "bundle_path": "inputs/my-target.pdb",
+            "target_input": "A1-76",
+            "hotspot_residues": [
+              "A8",
+              "A44",
+              "A70"
+            ],
+            "binder_length": [
+              64
+            ]
+          },
+          "run_name": "custom-binder",
+          "seed": 42,
+          "num_samples": 1,
+          "diffusion_steps": 400
+        }
+      ]
+    },
+    "client_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 8,
+      "maxLength": 200
+    }
+  },
+  "$defs": {
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size_bytes",
+        "media_type"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "media_type": {
+          "const": "application/vnd.fs2.scientific-manifest+json"
+        },
+        "compression": {
+          "enum": [
+            "none"
+          ]
+        }
+      }
+    }
+  }
+}

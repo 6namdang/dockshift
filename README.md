@@ -27,6 +27,9 @@ The current target is **hTERT telomerase** (ChEMBL `CHEMBL2916`).
 
 ## Quick start
 
+For the integrated React/FastAPI and collective-agent application, see the
+[developer handoff](docs/DEVELOPER_HANDOFF.md) for startup, readiness and blocked scientific stages.
+
 Requires Python 3.11 and [uv](https://docs.astral.sh/uv/). The structural subsystem
 additionally needs external engines, which are not bundled — see
 [Structural discovery](#structural-discovery).
@@ -46,8 +49,9 @@ uv run uvicorn app.main:app --reload
 | MCP (stdio) | `uv run python -m app.mcp_server` |
 | MCP over HTTP | `http://127.0.0.1:8000/mcp` — opt-in, see [Configuration](#configuration) |
 
-One process serves all of them: the frontend is a dependency-free static page served by
-FastAPI, so there is no separate build step.
+Build the React frontend with `npm ci && npm run build` in `frontend/` first.
+FastAPI serves that build under `/ui/`. The developer handoff also describes the
+separate Vite development server.
 
 ---
 

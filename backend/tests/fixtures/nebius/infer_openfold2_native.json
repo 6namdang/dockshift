@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Predict a protein from its sequence; returns ranked structure and confidence values. Portable OpenFold2 with a single-sequence dummy MSA. No external MSA, template or relaxation fields.",
+  "properties": {
+    "input_id": {
+      "description": "Caller-chosen input identifier.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "type": "string"
+    },
+    "relax_prediction": {
+      "const": false,
+      "default": false,
+      "description": "Relaxation is not supported by this runtime."
+    },
+    "selected_models": {
+      "const": [
+        1
+      ],
+      "default": [
+        1
+      ],
+      "description": "Exactly parameter set 1: model_3_ptm / finetuning_no_templ_ptm_1."
+    },
+    "sequence": {
+      "description": "Single canonical uppercase protein sequence.",
+      "maxLength": 1024,
+      "minLength": 1,
+      "pattern": "^[ACDEFGHIKLMNPQRSTVWY]+$",
+      "type": "string"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "input_id",
+    "sequence",
+    "selected_models",
+    "relax_prediction"
+  ]
+}

@@ -144,7 +144,9 @@ def test_unconfigured_role_and_no_compute(tmp_path):
 
 
 def test_schema_pending_and_poll_without_resubmit(tmp_path):
-    config = settings(tmp_path, agent_compute_enabled=True)
+    from app.integration.scienceclaw.adapters.base import ToolUnavailable
+
+    config = settings(tmp_path, agent_compute_enabled=True, agent_remote_wait_seconds=0)
     science, deps = make_tools(tmp_path, config)
     nebius = deps[-1]
     schema = {
@@ -163,18 +165,34 @@ def test_schema_pending_and_poll_without_resubmit(tmp_path):
             "A5a", RemoteJob(tool="infer_diffdock_native", arguments={"protein": "reviewed input"})
         )
     )
-    assert data["_status"] == "BLOCKED"
-    assert data["operation_id"] == "op1"
+    assert data["_status"] == "BLOCKED" and data["operation_id"] == "op1"
     assert nebius.client.call.call_args.args[1]["idempotency_key"].endswith("-A5a")
+    resumed = tmp_path / "resume"
+    resumed.mkdir()
+    science.out = resumed
     nebius.client.call.reset_mock()
-    nebius.operation.return_value = {"operation": {"id": "op1", "status": "SUCCEEDED"}}
-    nebius.operation_result.return_value = {"status": "SUCCEEDED", "poses": [{"confidence": 0.2}]}
-    data, _ = asyncio.run(
-        science.remote("A5a", RemoteJob(tool="infer_diffdock_native", operation_id="op1"))
-    )
-    assert data["_status"] == "SUCCEEDED"
-    nebius.client.call.assert_not_called()
-    nebius.operation_result.assert_awaited_once_with("op1")
+
+    async def poll_only(tool, arguments, **kwargs):
+        assert tool in ("get_operation", "get_operation_result")
+        return (
+            {"operation": {"id": "op1", "status": "SUCCEEDED"}}
+            if tool == "get_operation"
+            else {"status": "SUCCEEDED", "poses": [{"confidence": 0.2}]}
+        )
+
+    nebius.client.call.side_effect = poll_only
+    with pytest.raises(ToolUnavailable, match="artifact pointer"):
+        asyncio.run(
+            science.remote(
+                "A5a",
+                RemoteJob(
+                    tool="infer_diffdock_native",
+                    arguments={"protein": "reviewed input"},
+                    operation_id="op1",
+                ),
+            )
+        )
+    assert nebius.client.call.await_count == 2
 
 
 def test_nebius_failure_is_failed_without_credentials(tmp_path):

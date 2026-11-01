@@ -45,8 +45,19 @@ class DockshiftRuntime(AgentRuntime):
         self.redact = Redactor(science.settings)
         self.trace = Trace(self.out / "agent_execution_trace.jsonl", self.run_id)
         self.provider = provider or (
-            NebiusLLMProvider(science.settings)
-            if science.request.use_nebius_llm
+            NebiusLLMProvider(
+                science.settings,
+                max_calls=(
+                    (
+                        science.request.budget.max_llm_calls
+                        if science.request.budget.approved_by
+                        else 0
+                    )
+                    if science.request.workflow == "collective"
+                    else 64
+                ),
+            )
+            if science.request.use_nebius_llm and science.request.workflow != "preparation"
             else DisabledProvider()
         )
         self.probe = self.provider.probe()
@@ -55,9 +66,33 @@ class DockshiftRuntime(AgentRuntime):
         self.max_cycles = 0
         self.methods = {s.agent_id: self.bind(s.agent_id) for s in SPECS}
         self.specs = SPECS
+        if science.request.workflow == "collective":
+            self.specs = tuple(
+                replace(s, parents=("A1",)) if s.agent_id == "A6" else s for s in SPECS
+            )
         if science.request.workflow == "candidate":
             self.specs = tuple(
                 replace(s, parents=("A1",), tool="screen_candidate") if s.agent_id == "A3" else s
+                for s in SPECS
+            )
+        if science.request.workflow == "candidate" and science.request.md_review:
+            self.specs = tuple(
+                replace(s, parents=("A5a",)) if s.agent_id == "A6" else s for s in self.specs
+            )
+        if science.request.workflow == "preparation":
+            names = {
+                "A1": "verify_structural_sources",
+                "A2": "audit_structure_inputs",
+                "A3": "verify_reference_ligand",
+                "A5a": "prepare_diffdock_request",
+                "A6": "audit_md_prerequisites",
+            }
+            self.specs = tuple(
+                replace(
+                    s,
+                    tool=names.get(s.agent_id, s.tool),
+                    parents=("A5a",) if s.agent_id == "A6" else s.parents,
+                )
                 for s in SPECS
             )
         for spec in self.specs:
@@ -134,7 +169,10 @@ class DockshiftRuntime(AgentRuntime):
                 else "BLOCKED",
                 "candidate_name": self.science.request.candidate_name,
                 "outputs": self.science.verified_outputs,
-                "review_provider": "nebius" if self.science.request.use_nebius_llm else None,
+                "review_provider": "nebius"
+                if self.science.request.use_nebius_llm
+                and self.science.request.workflow != "preparation"
+                else None,
             }
         )
         bundle = self.redact(bundle)

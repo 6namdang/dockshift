@@ -1,0 +1,84 @@
+{
+  "observed_at_utc": "2026-11-01T11:02:50.858331+00:00",
+  "source": "Authenticated read-only get_model_schema; no scientific jobs submitted",
+  "models": [
+    {
+      "model": "alphafold3",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "alphafold3-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "boltz2",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "boltzgen",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "boltzgen-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "esmfold2",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "esmfold2-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "genmol",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "molmim",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "openfold2",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "openfold3",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "proteina-complexa",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "proteina-complexa-portable-custom-20261026-a1b31454f9f8",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "proteinmpnn",
+      "reported_qualification": "observed-in-serverless",
+      "runtime_revision": null,
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "protenix-v2",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "protenix-v2-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "rfd4-proteina",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "rfd4-proteina-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    },
+    {
+      "model": "rfdiffusion",
+      "reported_qualification": "configured-native-dag-awaiting-exact-release-qualification",
+      "runtime_revision": "rfdiffusion-gpu-portability-20261022-4b28fe3",
+      "live_execution_verified_in_this_stage": false
+    }
+  ]
+}

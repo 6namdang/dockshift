@@ -126,9 +126,26 @@ class RemoteRunner:
             raise ToolFailed("NEBIUS_OPERATION_FAILED", "Nebius operation did not succeed.")
         if operation_id:
             payload = _unwrap(
-                await self.client.call("get_operation_result", {"operation_id": operation_id})
+                await self.client.call(
+                    "get_operation_result", {"operation_id": operation_id}, allow_pending=True
+                )
             )
         self.save(f"{agent}_remote_result.json", payload)
+        envelope = payload.get("error") or {}
+        if (
+            operation_id
+            and isinstance(envelope, dict)
+            and envelope.get("code")
+            in {"OPERATION_PENDING", "RESULT_NOT_READY", "OPERATION_NOT_READY"}
+        ):
+            return {
+                "status": "PENDING",
+                "tool": tool,
+                "operation_id": operation_id,
+                "detail": (
+                    "Native compute completed but result delivery is pending; resume only polls."
+                ),
+            }
         if payload.get("error"):
             raise ToolFailed("NEBIUS_RESULT_ERROR", "Nebius returned an error instead of a result.")
         # An inline success must be explicit. A polled success is already attested above.
@@ -148,6 +165,14 @@ class RemoteRunner:
                 continue
             seen.add(artifact_id)
             artifacts.append(await self.retrieve(agent, pointer, len(artifacts)))
+            # Result manifests may refer to separate structures/trajectories.
+            pointers.extend(
+                v
+                for v in objects(artifacts[-1].get("data"))
+                if v.get("artifact_id") and v["artifact_id"] not in seen
+            )
+            if len(seen) > 32:
+                raise ToolUnavailable("ARTIFACT_COUNT_LIMIT", "Too many scientific artifacts.")
         return {
             "status": "SUCCEEDED",
             "tool": tool,
@@ -205,10 +230,30 @@ class RemoteRunner:
             raise ToolFailed(
                 "ARTIFACT_CONTAINS_SECRET", "Credential-bearing artifact was rejected."
             )
-        filename = f"{agent}_artifact_{index}.json"
-        # Scientific JSON is parsed before publishing; trajectories need a separate parser.
-        document = json.loads(data)
-        json.dumps(document, allow_nan=False)
+        media_type = next(
+            (v.get("media_type") for v in candidates if v.get("media_type")), "application/json"
+        )
+        suffixes = {
+            "application/json": ".json",
+            "chemical/x-mdl-sdfile": ".sdf",
+            "chemical/x-pdb": ".pdb",
+            "application/gzip": ".tar.gz",
+            "application/x-tar": ".tar",
+            "application/zip": ".zip",
+            "chemical/x-mmcif": ".cif",
+            "chemical/x-cif": ".cif",
+            "chemical/x-gromacs-xtc": ".xtc",
+            "application/x-netcdf": ".nc",
+            "chemical/x-charmm-dcd": ".dcd",
+            "chemical/x-gromacs-trr": ".trr",
+        }
+        suffix = suffixes.get(media_type, ".bin")
+        filename = f"{agent}_artifact_{index}{suffix}"
+        # Byte integrity is distinct from scientific-format validation. Never unpack archives here.
+        document = None
+        if media_type == "application/json":
+            document = json.loads(data)
+            json.dumps(document, allow_nan=False)
         with (self.out / filename).open("xb") as f:
             f.write(data)
         return {
@@ -216,6 +261,9 @@ class RemoteRunner:
             "sha256": digest,
             "size_bytes": size,
             "filename": filename,
+            "native_name": pointer.get("filename") or pointer.get("name"),
             "data": document,
             "hash_verified": True,
+            "media_type": media_type,
+            "format_validated": media_type == "application/json",
         }

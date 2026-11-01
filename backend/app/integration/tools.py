@@ -4,13 +4,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from typing import Any
-
-from jsonschema import Draft202012Validator
 
 from app.literature.models import SearchRequest
 from app.nebius.client import NebiusError, NebiusNotConfiguredError
-from app.nebius.service import _unwrap
 
 from .privacy import Redactor
 from .scienceclaw.adapters.base import ToolFailed, ToolUnavailable
@@ -118,6 +114,8 @@ class DockshiftTools:
         self.verified_outputs = {}
         self.progress = lambda *args: None
         self.candidate_workflow = None
+        self.scientific_preparation = None
+        self.collective_workflow = None
 
     def require_parents(self, agent):
         from .scienceclaw.runtime.engine import SPECS
@@ -125,6 +123,13 @@ class DockshiftTools:
         parents = next(s.parents for s in SPECS if s.agent_id == agent)
         if agent == "A7":
             return
+        if self.request.workflow == "collective":
+            # Branch-specific typed bindings are enforced by CollectiveWorkflow.
+            parents = () if agent == "A1" else ("A1",)
+        if self.request.workflow == "candidate" and agent == "A6" and self.request.md_review:
+            parents = ("A5a",)
+        if self.request.workflow == "preparation" and agent == "A6":
+            parents = ("A5a",)
         if self.request.workflow == "candidate" and agent == "A3":
             parents = ("A1",)  # QSAR/ADMET do not require a protein structure.
         if self.request.workflow == "candidate" and agent == "A5a":
@@ -191,13 +196,21 @@ class DockshiftTools:
         artifact = ArtifactRef.of(
             path, "scientific_result" if status == "SUCCEEDED" else "tool_receipt"
         )
+        typed = []
+        if self.collective_workflow:
+            typed = [
+                a
+                for key, a in self.collective_workflow.records.items()
+                if (key == "target" and agent == "A1")
+                or any(s.id == key and s.agent == agent for s in self.request.steps)
+            ]
         event = AgentEvent(
             run_id=self.run_id,
             agent=agent,
             event_type="DOCKSHIFT_TOOL_RESULT",
             status=WorkerState(status),
             target_accession=self.request.target.accession,
-            outputs=[artifact],
+            outputs=[artifact, *[ArtifactRef(**a) for a in typed]],
             metrics=metrics,
             evidence_state=EvidenceState.EXPERIMENT_REQUIRED,
             channel=channel,
@@ -212,12 +225,24 @@ class DockshiftTools:
             "status": status,
             "detail": detail,
             "error_code": code,
-            "artifacts": [asdict(artifact)],
+            "artifacts": [asdict(artifact), *typed],
             "metrics": [asdict(m) for m in metrics],
             "limitations": payload.get("limitations", []),
         }
 
     async def dispatch(self, agent):
+        if self.request.workflow == "collective":
+            from .collective import CollectiveWorkflow
+
+            if self.collective_workflow is None:
+                self.collective_workflow = CollectiveWorkflow(self)
+            return await self.collective_workflow.dispatch(agent)
+        if self.request.workflow == "preparation":
+            from .scientific_preparation import ScientificPreparation
+
+            if self.scientific_preparation is None:
+                self.scientific_preparation = ScientificPreparation(self)
+            return await self.scientific_preparation.dispatch(agent)
         if self.request.workflow == "candidate":
             from .candidate import CandidateWorkflow
 
@@ -325,6 +350,10 @@ class DockshiftTools:
             raise ToolUnavailable(
                 "SCIENTIFIC_INPUT_REQUIRED", f"{agent} requires reviewed tool inputs."
             )
+        if agent == "A6" and job.tool.startswith("submit_"):
+            from .md_execution import execute_md
+
+            return await execute_md(self, job)
         return await self.remote(agent, job)
 
     async def remote(self, agent, job):
@@ -337,75 +366,38 @@ class DockshiftTools:
             raise ToolUnavailable(
                 "COMPUTE_APPROVAL_REQUIRED", "Agent scientific compute is disabled."
             )
-        tools = {t.name: t for t in await self.nebius.client.list_tools()}
-        if job.tool not in tools:
+        if job.tool in ("run_mdprecheck", "infer_admet_ai_native"):
+            return {
+                "_status": "BLOCKED",
+                "_error_code": (
+                    "MD_TRAJECTORY_REQUIRED"
+                    if job.tool == "run_mdprecheck"
+                    else "MOLECULE_GENERATION_REQUIRED"
+                ),
+            }, "Prerequisite tools cannot complete the scientific role; use a reviewed workflow."
+        from .artifact_io import expand_archives
+        from .remote import RemoteRunner
+        from .scientific_outputs import validate_output
+
+        result = await RemoteRunner(
+            self.settings, self.nebius.client, self.out, self.run_id
+        ).execute(agent, job.tool, job.arguments, job.operation_id)
+        self.verified_outputs[agent + "_operation"] = result
+        if result["status"] == "PENDING":
+            return {
+                **result,
+                "_status": "BLOCKED",
+                "_error_code": "REMOTE_OPERATION_PENDING",
+            }, "Scientific operation pending; resume only polls the same operation."
+        expand_archives(result, self.out, self.settings.agent_max_artifact_bytes, self.redact)
+        if job.tool in ("run_mdprecheck", "infer_admet_ai_native", "infer_diffdock_native"):
             raise ToolUnavailable(
-                "NEBIUS_TOOL_UNAVAILABLE", "Selected model is absent from Nebius discovery."
+                "SPECIALIZED_WORKFLOW_REQUIRED",
+                "Use the managed candidate or collective workflow for identity-bound validation.",
             )
-        if job.operation_id:
-            payload = _unwrap(await self.nebius.operation(job.operation_id))
-            state, _ = remote_state(payload)
-            operation = payload.get("operation") or {}
-            if str(operation.get("status") or payload.get("status")).upper() in {
-                "SUCCEEDED",
-                "SUCCESS",
-                "COMPLETED",
-            }:
-                payload = _unwrap(await self.nebius.operation_result(job.operation_id))
-        else:
-            arguments = dict(job.arguments)
-            schema = tools[job.tool].input_schema
-            if not schema:
-                raise ToolUnavailable(
-                    "NEBIUS_SCHEMA_REQUIRED", "Server did not advertise an input schema."
-                )
-            # Durable job key is independent of LLM output and reused by the remote service.
-            if "idempotency_key" in schema.get("properties", {}):
-                arguments["idempotency_key"] = f"{self.run_id}-{agent}"
-            Draft202012Validator(schema).validate(arguments)
-            (self.out / f"{agent}_nebius_submission.json").write_text(
-                json.dumps(
-                    self.redact({"tool": job.tool, "schema": schema, "arguments": arguments}),
-                    indent=2,
-                    allow_nan=False,
-                )
-            )
-            payload = _unwrap(
-                await self.nebius.client.call(job.tool, arguments, allow_pending=True)
-            )
-        state, operation_id = remote_state(payload)
-        operation_id = operation_id or job.operation_id
-        code = "REMOTE_OPERATION_PENDING" if operation_id else "REMOTE_OUTPUT_UNVERIFIED"
-        if state == "FAILED":
-            code = "REMOTE_OPERATION_FAILED"
-        data: dict[str, Any] = {
-            "tool": job.tool,
-            "operation_id": operation_id,
-            "remote": payload,
-            "_status": state,
-            "limitations": [
-                "Raw model outputs retain native names and units.",
-                "Computational output requires scientific review.",
-            ],
-        }
-        if state != "SUCCEEDED":
-            data["_error_code"] = code
-        # GenMol outputs must pass chemical validation before downstream docking.
-        if state == "SUCCEEDED" and agent == "A3" and job.tool != "infer_admet_ai_native":
-            molecules = payload.get("molecules") or (payload.get("result") or {}).get("molecules")
-            if not isinstance(molecules, list) or not molecules:
-                data.update(_status="BLOCKED", _error_code="GENERATED_CHEMISTRY_REVIEW_REQUIRED")
-            else:
-                audits = [
-                    RDKitAdapter().audit(m if isinstance(m, str) else m.get("smiles", ""))
-                    for m in molecules
-                ]
-                data["chemical_audits"] = [asdict(a) for a in audits]
-                if not all(a.valid for a in audits):
-                    data.update(_status="FAILED", _error_code="INVALID_GENERATED_CHEMISTRY")
-        if job.tool == "infer_admet_ai_native" and state == "SUCCEEDED":
-            data.update(_status="BLOCKED", _error_code="MOLECULE_GENERATION_REQUIRED")
-        # MD preparation is a prerequisite, never an executed trajectory.
-        if job.tool == "run_mdprecheck" and state == "SUCCEEDED":
-            data.update(_status="BLOCKED", _error_code="MD_TRAJECTORY_REQUIRED")
-        return data, "Nebius scientific tool receipt; pending jobs are polled, never resubmitted."
+        validated = validate_output(job.tool, result, job.acceptance, self.out)
+        self.verified_outputs[agent + "_validated"] = validated
+        return {
+            "native": result,
+            "validated": validated,
+        }, "Model-specific output checks passed; scientific review remains required."

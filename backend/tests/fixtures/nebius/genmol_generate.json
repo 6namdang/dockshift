@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Generate de-novo molecules using a SAFE mask-token minimum, not heavy-atom bounds; returns generated SMILES and property scores. De-novo mask [*{minimum-maximum}], with 1 <= minimum <= maximum <= 512. The adapter passes floor((minimum + maximum) / 2) as upstream min_add_len, a minimum number of SAFE mask tokens; [*{10-20}] therefore reports minimum_mask_tokens=15. Upstream samples token length from its empirical distribution above that minimum. Neither endpoint is a heavy-atom bound, and maximum is not a maximum token or molecular-size limit. Measure and filter heavy-atom counts on returned SMILES separately if required. Range order and finite numeric strings are checked by the runtime.",
+  "properties": {
+    "noise": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": 1,
+      "description": "Finite nonnegative sampling noise; numeric strings are also accepted by this adapter.",
+      "title": "Noise"
+    },
+    "num_molecules": {
+      "default": 1,
+      "description": "Requested number of molecules.",
+      "maximum": 16,
+      "minimum": 1,
+      "title": "Num Molecules",
+      "type": "integer"
+    },
+    "scoring": {
+      "default": "QED",
+      "description": "Molecule scoring function (case-insensitive QED or LogP).",
+      "pattern": "^(?:[Qq][Ee][Dd]|[Ll][Oo][Gg][Pp])$",
+      "title": "Scoring",
+      "type": "string"
+    },
+    "smiles": {
+      "description": "De-novo mask [*{minimum-maximum}], with 1 <= minimum <= maximum <= 512. The adapter passes floor((minimum + maximum) / 2) as upstream min_add_len, a minimum number of SAFE mask tokens; [*{10-20}] therefore reports minimum_mask_tokens=15. Upstream samples token length from its empirical distribution above that minimum. Neither endpoint is a heavy-atom bound, and maximum is not a maximum token or molecular-size limit. Measure and filter heavy-atom counts on returned SMILES separately if required.",
+      "pattern": "^\\[\\*\\{[0-9]+-[0-9]+\\}\\]$",
+      "title": "Smiles",
+      "type": "string"
+    },
+    "step_size": {
+      "default": 1,
+      "description": "Accepted compatibility field; not consumed by the current GenMol de-novo sampler.",
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Step Size",
+      "type": "integer"
+    },
+    "temperature": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "default": 1,
+      "description": "Finite positive sampling temperature; numeric strings are also accepted by this adapter.",
+      "title": "Temperature"
+    },
+    "unique": {
+      "default": false,
+      "description": "Remove duplicate generated SMILES from the response.",
+      "title": "Unique",
+      "type": "boolean"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "smiles"
+  ],
+  "title": "GenerateRequest"
+}

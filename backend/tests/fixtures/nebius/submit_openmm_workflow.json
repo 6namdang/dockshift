@@ -1,0 +1,560 @@
+{
+  "type": "object",
+  "$defs": {
+    "ArtifactPointer": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 53687091200,
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "media_type": {
+          "default": "application/octet-stream",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "compression": {
+          "default": "none",
+          "title": "Compression",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "ArtifactPointer",
+      "type": "object"
+    },
+    "OpenmmSubmit": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "default": "fs2-serve.nebius.ai/scientific-run-request/v1",
+          "pattern": "^fs2\\-serve\\.nebius\\.ai/scientific\\-run\\-request/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "operation": {
+          "default": "run-workflow",
+          "pattern": "^run-workflow$",
+          "title": "Operation",
+          "type": "string"
+        },
+        "service_class": {
+          "default": "customer-batch",
+          "title": "Service Class",
+          "type": "string"
+        },
+        "input_manifest": {
+          "$ref": "#/$defs/ArtifactPointer"
+        },
+        "parameters": {
+          "$ref": "#/$defs/Parameters"
+        },
+        "client_context": {
+          "additionalProperties": true,
+          "title": "Client Context",
+          "type": "object"
+        }
+      },
+      "required": [
+        "input_manifest",
+        "parameters"
+      ],
+      "title": "OpenmmSubmit",
+      "type": "object"
+    },
+    "Parameters": {
+      "additionalProperties": false,
+      "description": " This Serverless integration executes exactly one isolated job per operation. Use separate submissions for independent replicas. Native checkpoints are not GPU snapshots.",
+      "properties": {
+        "schema": {
+          "const": "fs2-serve.nebius.ai/openmm-workflow-request/v1",
+          "title": "Schema",
+          "type": "string"
+        },
+        "jobs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[a-z][a-z0-9-]{0,47}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "system": {
+                "additionalProperties": false,
+                "properties": {
+                  "format": {
+                    "enum": [
+                      "pdb",
+                      "amber",
+                      "gromacs"
+                    ],
+                    "title": "Format",
+                    "type": "string"
+                  },
+                  "coordinates": {
+                    "description": "Prepared PDB/mmCIF, Amber inpcrd/rst7, or GROMACS GRO in the input bundle.",
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Coordinates",
+                    "type": "string"
+                  },
+                  "topology": {
+                    "anyOf": [
+                      {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Amber PRMTOP or GROMACS TOP, with all includes bundled.",
+                    "title": "Topology"
+                  },
+                  "state": {
+                    "anyOf": [
+                      {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Optional portable OpenMM State XML with matching topology/particle order. Restores physical state, not random-generator history. This is a new scientific operation; ordinary interrupted-job recovery uses resume_scientific_run.",
+                    "title": "State"
+                  },
+                  "forcefields": {
+                    "description": "OpenMM bundled force-field XML names; used only for PDB/mmCIF. Native topologies carry their own parameters.",
+                    "items": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "minItems": 1,
+                    "title": "Forcefields",
+                    "type": "array"
+                  },
+                  "include_directory": {
+                    "default": ".",
+                    "description": "Bundled GROMACS include root. Every include must remain inside the bundle.",
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "title": "Include Directory",
+                    "type": "string"
+                  },
+                  "defines": {
+                    "description": "Explicit GROMACS preprocessor defines; no shell commands.",
+                    "patternProperties": {
+                      "^[A-Za-z_][A-Za-z0-9_]*$": {
+                        "type": "string"
+                      }
+                    },
+                    "title": "Defines",
+                    "type": "object"
+                  },
+                  "add_hydrogens": {
+                    "default": false,
+                    "title": "Add Hydrogens",
+                    "type": "boolean"
+                  },
+                  "ph": {
+                    "default": 7.0,
+                    "maximum": 14,
+                    "minimum": 0,
+                    "title": "Ph",
+                    "type": "number"
+                  },
+                  "solvent": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "model": {
+                            "default": "tip3p",
+                            "enum": [
+                              "tip3p",
+                              "spce",
+                              "tip4pew",
+                              "tip5p"
+                            ],
+                            "title": "Model",
+                            "type": "string"
+                          },
+                          "padding_nm": {
+                            "default": 1.0,
+                            "exclusiveMinimum": 0,
+                            "title": "Padding Nm",
+                            "type": "number"
+                          },
+                          "ionic_strength_molar": {
+                            "default": 0.0,
+                            "minimum": 0,
+                            "title": "Ionic Strength Molar",
+                            "type": "number"
+                          },
+                          "neutralize": {
+                            "default": true,
+                            "title": "Neutralize",
+                            "type": "boolean"
+                          },
+                          "positive_ion": {
+                            "default": "Na+",
+                            "enum": [
+                              "Cs+",
+                              "K+",
+                              "Li+",
+                              "Na+",
+                              "Rb+"
+                            ],
+                            "title": "Positive Ion",
+                            "type": "string"
+                          },
+                          "negative_ion": {
+                            "default": "Cl-",
+                            "enum": [
+                              "Cl-",
+                              "Br-",
+                              "F-",
+                              "I-"
+                            ],
+                            "title": "Negative Ion",
+                            "type": "string"
+                          }
+                        },
+                        "title": "Solvent",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "nonbonded_method": {
+                    "default": "PME",
+                    "enum": [
+                      "NoCutoff",
+                      "CutoffNonPeriodic",
+                      "CutoffPeriodic",
+                      "Ewald",
+                      "PME",
+                      "LJPME"
+                    ],
+                    "title": "Nonbonded Method",
+                    "type": "string"
+                  },
+                  "nonbonded_cutoff_nm": {
+                    "default": 1.0,
+                    "exclusiveMinimum": 0,
+                    "title": "Nonbonded Cutoff Nm",
+                    "type": "number"
+                  },
+                  "constraints": {
+                    "default": "HBonds",
+                    "enum": [
+                      "none",
+                      "HBonds",
+                      "AllBonds",
+                      "HAngles"
+                    ],
+                    "title": "Constraints",
+                    "type": "string"
+                  },
+                  "rigid_water": {
+                    "default": true,
+                    "title": "Rigid Water",
+                    "type": "boolean"
+                  },
+                  "ewald_error_tolerance": {
+                    "default": 0.0005,
+                    "exclusiveMaximum": 1,
+                    "exclusiveMinimum": 0,
+                    "title": "Ewald Error Tolerance",
+                    "type": "number"
+                  },
+                  "hydrogen_mass_amu": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "Explicit hydrogen mass repartitioning; never enabled automatically.",
+                    "title": "Hydrogen Mass Amu"
+                  }
+                },
+                "required": [
+                  "format",
+                  "coordinates"
+                ],
+                "title": "System",
+                "type": "object"
+              },
+              "steps": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "pattern": "^[a-z][a-z0-9-]{0,47}$",
+                      "title": "Id",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "enum": [
+                        "minimize",
+                        "equilibrate",
+                        "production"
+                      ],
+                      "title": "Kind",
+                      "type": "string"
+                    },
+                    "steps": {
+                      "anyOf": [
+                        {
+                          "maximum": 2147483647,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "title": "Steps"
+                    },
+                    "timestep_ps": {
+                      "default": 0.002,
+                      "description": "Physical integrator timestep. Validate constraints, stability and sampling for the actual system.",
+                      "exclusiveMinimum": 0,
+                      "title": "Timestep Ps",
+                      "type": "number"
+                    },
+                    "integrator": {
+                      "default": "langevin-middle",
+                      "enum": [
+                        "langevin-middle",
+                        "verlet"
+                      ],
+                      "title": "Integrator",
+                      "type": "string"
+                    },
+                    "temperature_k": {
+                      "default": 300.0,
+                      "exclusiveMinimum": 0,
+                      "title": "Temperature K",
+                      "type": "number"
+                    },
+                    "friction_per_ps": {
+                      "default": 1.0,
+                      "minimum": 0,
+                      "title": "Friction Per Ps",
+                      "type": "number"
+                    },
+                    "pressure_bar": {
+                      "anyOf": [
+                        {
+                          "exclusiveMinimum": 0,
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "default": null,
+                      "description": "Optional isotropic Monte Carlo barostat for periodic NPT with Langevin dynamics.",
+                      "title": "Pressure Bar"
+                    },
+                    "barostat_interval": {
+                      "default": 25,
+                      "minimum": 1,
+                      "title": "Barostat Interval",
+                      "type": "integer"
+                    },
+                    "reset_velocities": {
+                      "default": false,
+                      "description": "Explicitly reinitialize velocities at this phase boundary; otherwise preserve them.",
+                      "title": "Reset Velocities",
+                      "type": "boolean"
+                    },
+                    "tolerance_kj_mol_nm": {
+                      "default": 10.0,
+                      "exclusiveMinimum": 0,
+                      "title": "Tolerance Kj Mol Nm",
+                      "type": "number"
+                    },
+                    "max_iterations": {
+                      "default": 0,
+                      "description": "Minimization maximum; zero lets OpenMM converge without an iteration bound, within the job wall-time budget.",
+                      "minimum": 0,
+                      "title": "Max Iterations",
+                      "type": "integer"
+                    },
+                    "report_interval": {
+                      "default": 1000,
+                      "minimum": 1,
+                      "title": "Report Interval",
+                      "type": "integer"
+                    },
+                    "checkpoint_interval_steps": {
+                      "default": 50000,
+                      "description": "Closed-process segment boundary. Checkpoint publication is acknowledged before continuing; includes binary checkpoint and portable State. Earlier closed segments remain in customer storage and are evicted from local scratch; all requested trajectory frames are retained.",
+                      "minimum": 1,
+                      "title": "Checkpoint Interval Steps",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "kind"
+                  ],
+                  "title": "Step",
+                  "type": "object"
+                },
+                "maxItems": 128,
+                "minItems": 1,
+                "title": "Steps",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "system",
+              "steps"
+            ],
+            "title": "Job",
+            "type": "object"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Jobs",
+          "type": "array"
+        },
+        "backend": {
+          "default": "cuda",
+          "description": "Intentional engine selection. CUDA failure never silently substitutes CPU. CPU uses a separately configured CPU-only native job.",
+          "enum": [
+            "cuda",
+            "cpu"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "precision": {
+          "default": "mixed",
+          "description": "CUDA arithmetic precision; CPU uses its native precision and reports that fact.",
+          "enum": [
+            "single",
+            "mixed",
+            "double"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "threads": {
+          "default": 4,
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Threads",
+          "type": "integer"
+        },
+        "random_seed": {
+          "default": 2026,
+          "maximum": 2147483647,
+          "minimum": 1,
+          "title": "Random Seed",
+          "type": "integer"
+        },
+        "deterministic_forces": {
+          "default": false,
+          "title": "Deterministic Forces",
+          "type": "boolean"
+        },
+        "max_wall_seconds": {
+          "default": 1209600,
+          "description": "Per-job execution budget in seconds, including checkpoint I/O; default and maximum fourteen days. Explicit smaller budgets are preserved.",
+          "maximum": 1209600,
+          "minimum": 60,
+          "title": "Max Wall Seconds",
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "anyOf": [
+            {
+              "minimum": 1048576,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional explicit cap on retained workflow bytes, including inputs, prepared system and all segment outputs. Omit to use authorized storage capacity without an additional workflow cap. Closed segments are durably archived; only recovery inputs and current state remain on execution scratch. Customer bucket capacity still applies.",
+          "title": "Max Output Bytes"
+        },
+        "output_destination": {
+          "const": "customer-bucket",
+          "default": "customer-bucket",
+          "enum": [
+            "customer-bucket"
+          ],
+          "title": "Output Destination",
+          "type": "string"
+        },
+        "output_prefix": {
+          "default": "runs/openmm",
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Output Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "jobs"
+      ],
+      "title": "Request",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "request": {
+      "$ref": "#/$defs/OpenmmSubmit"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request",
+    "idempotency_key"
+  ],
+  "title": "submitArguments",
+  "additionalProperties": false
+}

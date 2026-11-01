@@ -1,0 +1,366 @@
+{
+  "type": "object",
+  "$defs": {
+    "AmberSubmit": {
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "default": "fs2-serve.nebius.ai/scientific-run-request/v1",
+          "pattern": "^fs2\\-serve\\.nebius\\.ai/scientific\\-run\\-request/v1$",
+          "title": "Schema",
+          "type": "string"
+        },
+        "operation": {
+          "default": "run-workflow",
+          "pattern": "^run-workflow$",
+          "title": "Operation",
+          "type": "string"
+        },
+        "service_class": {
+          "default": "customer-batch",
+          "title": "Service Class",
+          "type": "string"
+        },
+        "input_manifest": {
+          "$ref": "#/$defs/ArtifactPointer"
+        },
+        "parameters": {
+          "$ref": "#/$defs/Parameters"
+        },
+        "client_context": {
+          "additionalProperties": true,
+          "title": "Client Context",
+          "type": "object"
+        }
+      },
+      "required": [
+        "input_manifest",
+        "parameters"
+      ],
+      "title": "AmberSubmit",
+      "type": "object"
+    },
+    "ArtifactPointer": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": {
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 53687091200,
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "media_type": {
+          "default": "application/octet-stream",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "compression": {
+          "default": "none",
+          "title": "Compression",
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "ArtifactPointer",
+      "type": "object"
+    },
+    "Parameters": {
+      "$id": "https://fs2-serve.nebius.ai/schema/amber-workflow-request/v1",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "description": "Ordered native AMBER workflows in a complete gzip-tar bundle. MDIN, topology, coordinates, restraints, reference files and alchemical context remain explicit. Native PMEMD CUDA SPFP/DPFP and CPU are distinct choices. Completed stages checkpoint the full stopped workspace; an interrupted active stage retries from the preceding committed stage, not an arbitrary partial restart. This Serverless integration executes exactly one isolated job per operation. Use separate submissions for independent replicas. Native checkpoints are not GPU snapshots.",
+      "properties": {
+        "schema": {
+          "const": "fs2-serve.nebius.ai/amber-workflow-request/v1"
+        },
+        "jobs": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "pattern": "^[a-z][a-z0-9-]{0,47}$",
+                "type": "string"
+              },
+              "steps": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "pattern": "^[a-z][a-z0-9-]{0,47}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "default": "pmemd",
+                      "enum": [
+                        "pmemd",
+                        "tleap",
+                        "cpptraj",
+                        "parmed",
+                        "antechamber",
+                        "parmchk2",
+                        "mmpbsa"
+                      ]
+                    },
+                    "input": {
+                      "description": "Native MDIN or native tool script, relative to the step directory. No shell command or arbitrary executable interface is added.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "directory": {
+                      "default": ".",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "topology": {
+                      "description": "PMEMD topology; optional default topology for cpptraj or ParmEd.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "coordinates": {
+                      "description": "PMEMD initial coordinates/restart; optional ParmEd coordinates.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "reference": {
+                      "description": "PMEMD restraint reference, passed with -ref. All auxiliary native dependencies must also be bundled.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "backend": {
+                      "description": "PMEMD-only per-stage precision/accelerator override.",
+                      "enum": [
+                        "cuda-spfp",
+                        "cuda-dpfp",
+                        "cpu"
+                      ]
+                    },
+                    "task": {
+                      "description": "PMEMD completion assertion only; never rewrites imin or the native scientific settings.",
+                      "enum": [
+                        "dynamics",
+                        "minimization"
+                      ]
+                    },
+                    "expected_nsteps": {
+                      "description": "Required for dynamics: exact requested native nstlim, checked against native input echo and final NSTEP. A timlim early exit is incomplete.",
+                      "maximum": 2147483647,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "output_prefix": {
+                      "description": "Native output stem, defaulting to step ID: PMEMD uses .mdout/.rst7/.nc/.mdvel/.mden/.mdinfo; MMPBSA uses .dat/.csv plus a stage-specific intermediate prefix.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "output": {
+                      "description": "Antechamber MOL2 or parmchk2 FRCMOD output filename.",
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "input_format": {
+                      "description": "Explicit molecular input format; parmchk2 currently accepts MOL2 only.",
+                      "enum": [
+                        "pdb",
+                        "mol2",
+                        "sdf"
+                      ]
+                    },
+                    "atom_types": {
+                      "description": "Explicit native small-molecule parameter set; default GAFF2.",
+                      "enum": [
+                        "gaff",
+                        "gaff2"
+                      ]
+                    },
+                    "net_charge": {
+                      "description": "Antechamber requested total molecular charge in electron units.",
+                      "maximum": 20,
+                      "minimum": -20,
+                      "type": "integer"
+                    },
+                    "multiplicity": {
+                      "maximum": 9,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "residue_name": {
+                      "pattern": "^[A-Za-z][A-Za-z0-9]{0,2}$",
+                      "type": "string"
+                    },
+                    "charge_equivalence": {
+                      "description": "Native-eq option:0none,1atomic paths,2paths and stereochemistry. Default1; changing it is a scientific input change.",
+                      "enum": [
+                        0,
+                        1,
+                        2
+                      ]
+                    },
+                    "charge_tolerance_e": {
+                      "description": "Explicit final MOL2 charge-sum assertion; default0.001e. Residual is always reported, never silently corrected.",
+                      "maximum": 0.05,
+                      "minimum": 1e-06,
+                      "type": "number"
+                    },
+                    "complex_topology": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "receptor_topology": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "ligand_topology": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "solvated_topology": {
+                      "maxLength": 512,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "trajectories": {
+                      "description": "MMPBSA explicit trajectory filenames in order, not shell globs.",
+                      "items": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 128,
+                      "minItems": 1,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
+                    "expected_frames": {
+                      "description": "MMPBSA exact analyzed-frame assertion for every component energy table; never rewrites native frame selection.",
+                      "maximum": 1000000,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "use_mdins": {
+                      "description": "MMPBSA-only native-use-mdins: caller supplies complete prefix.intermediate_gb.mdin/pb.mdin context. No native MDIN is rewritten by the worker.",
+                      "type": "boolean"
+                    },
+                    "expected_outputs": {
+                      "default": [],
+                      "description": "Additional nonempty native outputs required for completion. Required nonempty for preparation/analysis tools; their scientific interpretation remains workflow-specific.",
+                      "items": {
+                        "maxLength": 512,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "maxItems": 256,
+                      "type": "array",
+                      "uniqueItems": true
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "input"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 128,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "steps"
+            ],
+            "type": "object"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "backend": {
+          "default": "cuda-spfp",
+          "enum": [
+            "cuda-spfp",
+            "cuda-dpfp",
+            "cpu"
+          ]
+        },
+        "threads": {
+          "default": 1,
+          "description": "CPU/tool threading limit; one process and at most one GPU. No multi-GPU/MPI qualification is implied.",
+          "maximum": 8,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_wall_seconds": {
+          "default": 1209600,
+          "description": "Per-job execution budget in seconds, including checkpoint I/O; default and maximum fourteen days. Explicit smaller budgets are preserved.",
+          "maximum": 1209600,
+          "minimum": 60,
+          "type": "integer"
+        },
+        "max_output_bytes": {
+          "default": null,
+          "description": "Optional explicit cap on retained workspace bytes, including inputs and outputs. Omit to use available authorized storage without an additional workflow cap. Execution scratch and customer bucket capacity still apply; native files and output cadence are preserved.",
+          "minimum": 1048576,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "output_destination": {
+          "default": "customer-bucket",
+          "enum": [
+            "customer-bucket"
+          ]
+        },
+        "output_prefix": {
+          "default": "runs/amber",
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "jobs"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "request": {
+      "$ref": "#/$defs/AmberSubmit"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request",
+    "idempotency_key"
+  ],
+  "title": "submitArguments",
+  "additionalProperties": false
+}

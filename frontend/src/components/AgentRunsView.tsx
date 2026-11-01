@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CollectiveControls, CollectiveReport } from '../integration/CollectiveWorkflow';
 import {
   ManagedCapabilities as AgentCapabilities, ManagedRunResult as AgentRunResult, ResearchProgress,
   fetchResearchCapabilities, fetchResearchReport,
@@ -31,6 +32,7 @@ export function AgentReport({ report, token = '' }: { report: AgentRunResult; to
       </tr>)}</tbody>
     </table></div>
     <h3 className="font-semibold">Computed evidence</h3>
+    {outputs?.collective && <CollectiveReport output={outputs.collective} runId={report.run_id} token={token} />}
     {report.computational_evidence.length === 0 ? <p>No computed metrics were recorded.</p>
       : <ul>{report.computational_evidence.map((m, i) =>
         <li key={i}>{m.agent}: {m.metric} = {m.value} {m.unit} · {m.method}</li>)}</ul>}
@@ -85,6 +87,8 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
   const [query, setQuery] = useState('hTERT BIBR1532');
   const [llm, setLlm] = useState(false);
   const [docking, setDocking] = useState(false);
+  const [preparationId, setPreparationId] = useState('');
+  const [dockingReviewer, setDockingReviewer] = useState('');
   const [advanced, setAdvanced] = useState(false);
   const [request, setRequest] = useState('{"workflow":"advanced","target":{},"jobs":{}}');
   const [runId, setRunId] = useState('');
@@ -120,6 +124,7 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
       const payload = advanced ? JSON.parse(request) : { workflow: 'candidate',
         candidate_name: candidate?.name || compound, compounds: [compound],
         literature_query: query.trim() || null, remote_admet: true, docking,
+        ...(docking ? { docking_preparation_id: preparationId, docking_reviewed_by: dockingReviewer } : {}),
         use_nebius_llm: llm, target: { label: 'hTERT' } };
       const result = resume ? await resumeResearch(runId, token) : await startResearch(payload, token);
       setRunId(result.run_id); setMonitorId(result.run_id);
@@ -132,6 +137,9 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
       Docking/MD: {capabilities?.compute_enabled ? 'authorized' : 'blocked'}</p>
     <label className="block">Execution token<input type="password" autoComplete="off" value={token}
       onChange={e => setToken(e.target.value)} className="block w-full bg-[#18232D] border rounded p-2" /></label>
+    <CollectiveControls token={token} onStarted={id => {
+      setRunId(id); setMonitorId(id); setReport(null); setProgress(null); setBusy(true); setError('');
+    }} />
     <label className="block">Candidate name or SMILES<input value={compound} onChange={e => setCompound(e.target.value)}
       className="block w-full bg-[#18232D] border rounded p-2" /></label>
     <label className="block">Literature query (optional)<input value={query} onChange={e => setQuery(e.target.value)}
@@ -139,7 +147,13 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
     <label className="block"><input type="checkbox" checked={llm} onChange={e => setLlm(e.target.checked)} />
       Use Nebius LLM agent reviews ({capabilities?.llm?.available ? capabilities.llm.model : 'configuration required'})</label>
     <label className="block"><input type="checkbox" checked={docking} onChange={e => setDocking(e.target.checked)} />
-      Request one DiffDock pose (requires separate compute authorization)</label>
+      Request reviewed DiffDock redocking (requires prepared inputs and separate compute authorization)</label>
+    {docking && <div className="space-y-2">
+      <label className="block">Verified docking preparation run ID<input value={preparationId}
+        onChange={e => setPreparationId(e.target.value)} className="block w-full bg-[#18232D] border rounded p-2" /></label>
+      <label className="block">Scientific input reviewer<input value={dockingReviewer}
+        onChange={e => setDockingReviewer(e.target.value)} className="block w-full bg-[#18232D] border rounded p-2" /></label>
+    </div>}
     <p className="text-sm text-[#90A4AF]">The backend verifies target identity, resolves the actual candidate,
       runs Dockshift QSAR and profiles, and submits one molecule to Nebius ADMET when authorized.
       Biologic design and MD remain blocked until reviewed inputs and authorization exist.</p>

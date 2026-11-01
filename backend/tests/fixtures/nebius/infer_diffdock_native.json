@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Dock a SMILES ligand into a receptor PDB; returns ranked poses and docking confidence. DiffDock v1.1 portable adapter; receptor PDB plus inline ligand SMILES.",
+  "properties": {
+    "ligand": {
+      "description": "Ligand SMILES, not an uploaded ligand path.",
+      "maxLength": 4096,
+      "minLength": 1,
+      "type": "string"
+    },
+    "ligand_file_type": {
+      "const": "txt",
+      "default": "txt",
+      "description": "Inline SMILES only."
+    },
+    "num_poses": {
+      "default": 1,
+      "description": "Number of docking poses.",
+      "maximum": 4,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "protein": {
+      "anyOf": [
+        {
+          "description": "Inline PDB containing ATOM records; 40\u20132,000,000 UTF-8 bytes (runtime checked).",
+          "pattern": "ATOM",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+          "properties": {
+            "artifact_id": {
+              "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "compression": {
+              "const": "none",
+              "default": "none",
+              "description": "Artifact input must be stored without transport compression."
+            },
+            "media_type": {
+              "description": "Media type of the uploaded bytes.",
+              "enum": [
+                "chemical/x-pdb",
+                "text/plain"
+              ],
+              "type": "string"
+            },
+            "sha256": {
+              "description": "SHA-256 of the exact uploaded bytes.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "size_bytes": {
+              "description": "Exact uploaded byte count.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "artifact_id",
+            "sha256",
+            "size_bytes",
+            "media_type",
+            "compression"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Inline PDB containing ATOM records; 40\u20132,000,000 UTF-8 bytes (runtime checked). Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+      "x-fs2-artifact-materialization": "utf-8",
+      "x-fs2-artifact-max-bytes": 2000000,
+      "x-fs2-artifact-media-types": [
+        "chemical/x-pdb",
+        "text/plain"
+      ]
+    },
+    "random_seed": {
+      "default": 1,
+      "description": "Random seed.",
+      "maximum": 2147483647,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "save_trajectory": {
+      "default": false,
+      "description": "Trajectory output is unsupported.",
+      "enum": [
+        false,
+        null
+      ]
+    },
+    "skip_gen_conformer": {
+      "default": false,
+      "description": "Skipping conformer generation is unsupported.",
+      "enum": [
+        false,
+        null
+      ]
+    },
+    "steps": {
+      "default": 18,
+      "description": "Sampling steps, no greater than time_divisions.",
+      "maximum": 20,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "time_divisions": {
+      "default": 20,
+      "description": "Diffusion time divisions; must be >= steps.",
+      "maximum": 20,
+      "minimum": 3,
+      "type": "integer"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "protein",
+    "ligand"
+  ]
+}

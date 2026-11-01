@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Predict a protein assembly from chains and optional supplied A3M; returns CIF structure results. OpenFold3 Preview2, fixed seed 42 and one sample; no template or online MSA search.",
+  "properties": {
+    "inputs": {
+      "description": "Exactly one input.",
+      "items": {
+        "additionalProperties": false,
+        "description": "One folding input.",
+        "properties": {
+          "input_id": {
+            "description": "Unique input or chain label.",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$",
+            "type": "string"
+          },
+          "molecules": {
+            "description": "Protein chains with unique IDs.",
+            "items": {
+              "additionalProperties": false,
+              "description": "Protein chain; chain IDs must be unique.",
+              "properties": {
+                "diffusion_samples": {
+                  "const": 1,
+                  "default": 1,
+                  "description": "The fixed Preview2 runtime generates exactly one sample."
+                },
+                "id": {
+                  "description": "Unique input or chain label.",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$",
+                  "type": "string"
+                },
+                "msa": {
+                  "additionalProperties": false,
+                  "description": "Optional supplied MSA.",
+                  "properties": {
+                    "main": {
+                      "additionalProperties": false,
+                      "description": "Main alignment.",
+                      "properties": {
+                        "a3m": {
+                          "additionalProperties": false,
+                          "description": "Supplied A3M.",
+                          "properties": {
+                            "alignment": {
+                              "anyOf": [
+                                {
+                                  "description": "Literal nonempty A3M text.",
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+                                  "properties": {
+                                    "artifact_id": {
+                                      "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "compression": {
+                                      "const": "none",
+                                      "default": "none",
+                                      "description": "Artifact input must be stored without transport compression."
+                                    },
+                                    "media_type": {
+                                      "description": "Media type of the uploaded bytes.",
+                                      "enum": [
+                                        "text/x-a3m",
+                                        "text/plain"
+                                      ],
+                                      "type": "string"
+                                    },
+                                    "sha256": {
+                                      "description": "SHA-256 of the exact uploaded bytes.",
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "size_bytes": {
+                                      "description": "Exact uploaded byte count.",
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "artifact_id",
+                                    "sha256",
+                                    "size_bytes",
+                                    "media_type",
+                                    "compression"
+                                  ],
+                                  "type": "object"
+                                }
+                              ],
+                              "description": "Literal nonempty A3M text. Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+                              "x-fs2-artifact-materialization": "utf-8",
+                              "x-fs2-artifact-max-bytes": 16777216,
+                              "x-fs2-artifact-media-types": [
+                                "text/x-a3m",
+                                "text/plain"
+                              ]
+                            },
+                            "format": {
+                              "const": "a3m",
+                              "default": "a3m",
+                              "description": "A3M alignment format."
+                            }
+                          },
+                          "required": [
+                            "alignment",
+                            "format"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "a3m"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "main"
+                  ],
+                  "type": "object"
+                },
+                "sequence": {
+                  "description": "Canonical uppercase amino-acid sequence.",
+                  "minLength": 1,
+                  "pattern": "^[ACDEFGHIKLMNPQRSTVWY]+$",
+                  "type": "string"
+                },
+                "type": {
+                  "const": "protein",
+                  "default": "protein",
+                  "description": "Only protein molecules are supported."
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "sequence"
+              ],
+              "type": "object"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "output_format": {
+            "const": "cif",
+            "default": "cif",
+            "description": "CIF output only."
+          }
+        },
+        "required": [
+          "input_id",
+          "output_format",
+          "molecules"
+        ],
+        "type": "object"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+    },
+    "request_id": {
+      "description": "Unique input or chain label.",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$",
+      "type": "string"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "request_id",
+    "inputs"
+  ]
+}

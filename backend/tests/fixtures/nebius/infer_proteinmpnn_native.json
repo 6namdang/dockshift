@@ -1,0 +1,180 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Design sequences compatible with a protein backbone PDB; returns sampled sequences and scores. ProteinMPNN v_48_020 portable adapter. Chain existence and PDB structure are checked by the runtime.",
+  "properties": {
+    "input_pdb": {
+      "anyOf": [
+        {
+          "description": "Inline PDB with ATOM records; 40\u20132,000,000 UTF-8 bytes (runtime checked).",
+          "pattern": "ATOM",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+          "properties": {
+            "artifact_id": {
+              "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "compression": {
+              "const": "none",
+              "default": "none",
+              "description": "Artifact input must be stored without transport compression."
+            },
+            "media_type": {
+              "description": "Media type of the uploaded bytes.",
+              "enum": [
+                "chemical/x-pdb",
+                "text/plain"
+              ],
+              "type": "string"
+            },
+            "sha256": {
+              "description": "SHA-256 of the exact uploaded bytes.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "size_bytes": {
+              "description": "Exact uploaded byte count.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "artifact_id",
+            "sha256",
+            "size_bytes",
+            "media_type",
+            "compression"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Inline PDB with ATOM records; 40\u20132,000,000 UTF-8 bytes (runtime checked). Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+      "x-fs2-artifact-materialization": "utf-8",
+      "x-fs2-artifact-max-bytes": 2000000,
+      "x-fs2-artifact-media-types": [
+        "chemical/x-pdb",
+        "text/plain"
+      ]
+    },
+    "input_pdb_chains": {
+      "anyOf": [
+        {
+          "description": "Chains to redesign.",
+          "items": {
+            "description": "One-character chain ID.",
+            "maxLength": 1,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Existing chains to redesign; omitted/null means all chains."
+    },
+    "num_seq_per_target": {
+      "default": 1,
+      "description": "Sequences sampled for the target.",
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "omit_AAs": {
+      "default": [
+        "X"
+      ],
+      "description": "Residue codes excluded during design.",
+      "items": {
+        "enum": [
+          "A",
+          "C",
+          "D",
+          "E",
+          "F",
+          "G",
+          "H",
+          "I",
+          "K",
+          "L",
+          "M",
+          "N",
+          "P",
+          "Q",
+          "R",
+          "S",
+          "T",
+          "V",
+          "W",
+          "Y",
+          "X"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "random_seed": {
+      "default": 1,
+      "description": "Random seed.",
+      "maximum": 2147483647,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "sampling_temp": {
+      "anyOf": [
+        {
+          "description": "Finite sampling temperature.",
+          "maximum": 1,
+          "minimum": 0.01,
+          "type": "number"
+        },
+        {
+          "description": "One temperature.",
+          "items": {
+            "description": "Finite sampling temperature.",
+            "maximum": 1,
+            "minimum": 0.01,
+            "type": "number"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        }
+      ],
+      "default": [
+        0.1
+      ],
+      "description": "One finite temperature, supplied as a number or a one-item array."
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "input_pdb"
+  ]
+}

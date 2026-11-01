@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Run bounded CMA-ES/QED search from a SMILES molecule; returns distinct changed molecules or explicit GENERATION_EXHAUSTED when the requested count is not found. Property improvement is not guaranteed. The search uses exactly particles * iterations model decodes and never silently expands this budget. num_molecules must not exceed that product; the runtime enforces this cross-field constraint. Finite-search exhaustion is not proof of chemical infeasibility. QED is a descriptor, not efficacy.",
+  "properties": {
+    "algorithm": {
+      "const": "CMA-ES",
+      "default": "CMA-ES",
+      "description": "Actual adaptive CMA-ES with the requested fixed population and iterations.",
+      "title": "Algorithm",
+      "type": "string"
+    },
+    "iterations": {
+      "default": 1,
+      "description": "Requested CMA-ES ask/tell updates; no automatic increase on exhaustion.",
+      "maximum": 16,
+      "minimum": 1,
+      "title": "Iterations",
+      "type": "integer"
+    },
+    "min_similarity": {
+      "default": 0.3,
+      "description": "Hard final-output Morgan/Tanimoto similarity cutoff. It is also used in the soft CMA-ES objective; the hard output filter is stricter than upstream's soft-only score.",
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Min Similarity",
+      "type": "number"
+    },
+    "minimize": {
+      "default": false,
+      "description": "Guide search toward lower QED and sort ascending; improvement over the starting molecule is not guaranteed.",
+      "title": "Minimize",
+      "type": "boolean"
+    },
+    "num_molecules": {
+      "default": 1,
+      "description": "Requested number of molecules.",
+      "maximum": 16,
+      "minimum": 1,
+      "title": "Num Molecules",
+      "type": "integer"
+    },
+    "particles": {
+      "default": 2,
+      "description": "CMA-ES population size, at least two; part of the exact decode budget.",
+      "maximum": 32,
+      "minimum": 2,
+      "title": "Particles",
+      "type": "integer"
+    },
+    "property_name": {
+      "const": "QED",
+      "default": "QED",
+      "description": "The hosted MolMIM optimizer targets QED only.",
+      "title": "Property Name",
+      "type": "string"
+    },
+    "radius": {
+      "default": 1,
+      "description": "Multiplier of the initial CMA-ES sigma 0.75; not a guaranteed chemical-distance radius.",
+      "exclusiveMinimum": 0,
+      "maximum": 10,
+      "title": "Radius",
+      "type": "number"
+    },
+    "smi": {
+      "description": "Starting molecule as a valid SMILES string.",
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Smi",
+      "type": "string"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "smi"
+  ],
+  "title": "GenerateRequest"
+}

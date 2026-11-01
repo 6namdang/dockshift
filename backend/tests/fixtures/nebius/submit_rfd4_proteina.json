@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "$id": "https://fs2-serve.nebius.ai/schema/scientific-run-request/v1",
+  "title": "Scientific batch run request",
+  "description": "User-authored request for POST /v1/models/{model_id}:submit. Idempotency is supplied in the Idempotency-Key HTTP header; queue, image, command, environment, and accelerator placement remain operator-owned.",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "operation",
+    "service_class",
+    "input_manifest",
+    "parameters"
+  ],
+  "properties": {
+    "schema": {
+      "const": "fs2-serve.nebius.ai/scientific-run-request/v1"
+    },
+    "operation": {
+      "enum": [
+        "generate"
+      ]
+    },
+    "service_class": {
+      "enum": [
+        "customer-batch",
+        "bulk-backfill"
+      ]
+    },
+    "input_manifest": {
+      "$ref": "#/$defs/artifact_ref"
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "RFD4-Proteina public Oct19 matched flow/autoencoder generation. Input is one uploaded annotated CIF; conditioning stays in its annotations. Generation only: no refolding oracle, reward-guided search, or quality guarantee.",
+      "properties": {
+        "num_replicates": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "batch_size": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "nsteps": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 60
+        },
+        "seed": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "default": 42
+        },
+        "recycle_strategy": {
+          "type": "string",
+          "enum": [
+            "thinking_low",
+            "thinking_medium",
+            "thinking_high"
+          ],
+          "default": "thinking_medium",
+          "description": "Upstream frontloaded presets; never auto-substituted by task identity."
+        },
+        "recycle_schedule": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "minItems": 1,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "integer",
+                "minimum": 0
+              }
+            ],
+            "items": false
+          },
+          "default": null,
+          "description": "Explicit upstream [step_count, recycle_depth] bands replace the chosen preset; step counts must sum to nsteps. Null retains the preset, which requires nsteps=60. Never rescaled automatically."
+        },
+        "compile": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use upstream compile-length buckets. False requests eager execution."
+        },
+        "partial_trajectory_fraction_steps": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "default": null
+        },
+        "save_trajectory_every": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        },
+        "save_chain_of_interest": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "recycle_schedule": {
+                "type": "null"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "nsteps": {
+                "const": 60
+              }
+            }
+          }
+        }
+      ]
+    },
+    "client_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "batch_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "correlation_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "display_name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 8,
+      "maxLength": 200
+    }
+  },
+  "$defs": {
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "artifact_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size_bytes",
+        "media_type"
+      ],
+      "properties": {
+        "artifact_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 268435456
+        },
+        "media_type": {
+          "const": "application/vnd.fs2.scientific-manifest+json"
+        },
+        "compression": {
+          "enum": [
+            "none"
+          ]
+        }
+      }
+    }
+  }
+}

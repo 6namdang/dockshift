@@ -73,6 +73,10 @@ class IntegrationService:
         return path
 
     def _prepare(self, request):
+        if request.workflow == "collective":
+            from .collective import audit_plan
+
+            audit_plan(request)
         run_id = new_run_id()
         out = self.root / run_id
         out.mkdir(parents=True, exist_ok=False)
@@ -207,7 +211,7 @@ class IntegrationService:
         if (out / "manifest.json").is_file():
             self.report(run_id)
         request = RunRequest.model_validate_json((out / "request.json").read_text())
-        if request.workflow != "candidate":
+        if request.workflow not in ("candidate", "collective"):
             raise ValueError("Managed resume supports candidate research runs.")
         operations = {}
         for path in out.glob("*_operation.json"):
@@ -215,6 +219,16 @@ class IntegrationService:
             operations[path.name.removesuffix("_operation.json")] = row["operation_id"]
         if not operations:
             raise ValueError("No durable operation was recorded; start a reviewed new run.")
+        if request.workflow == "collective":
+            return await self.start(
+                request.model_copy(
+                    update={
+                        "resume_operations": operations,
+                        "source_run": run_id,
+                        "resume_only": True,
+                    }
+                )
+            )
         # Never replay a docking submission during an ADMET-only resume.
         if request.docking and "A5a_diffdock" not in operations:
             raise ValueError(
@@ -238,7 +252,16 @@ class IntegrationService:
                 or hashlib.sha256(path.read_bytes()).hexdigest() != digest
             ):
                 raise ValueError("Agent evidence integrity verification failed.")
-        return json.loads((directory / "report.json").read_text())
+        report = json.loads((directory / "report.json").read_text())
+        if report.get("workflow") == "collective":
+            from .scienceclaw.contracts import ArtifactRef
+
+            for ref in report.get("artifacts", []):
+                artifact = ArtifactRef(**{k: ref[k] for k in ("path", "sha256", "role")})
+                path = artifact.resolve().resolve()
+                if not path.is_relative_to(self.root.resolve()) or not artifact.verify():
+                    raise ValueError("Collective handoff integrity verification failed.")
+        return report
 
     def artifact(self, run_id, name):
         self.report(run_id)

@@ -9,11 +9,12 @@ from .scienceclaw.adapters.base import ToolUnavailable
 
 
 class NebiusLLMProvider:
-    def __init__(self, settings):
+    def __init__(self, settings, max_calls=64):
         self.settings = settings
         self.base = settings.nebius_llm_base_url.rstrip("/")
         self.model = settings.nebius_llm_model
         self._discovery = None
+        self.max_calls, self.calls = max_calls, 0
 
     def probe(self):
         host = urlparse(self.base)
@@ -67,6 +68,8 @@ class NebiusLLMProvider:
     def chat(self, messages, tools):
         if not self.probe()["available"]:
             raise ToolUnavailable("NEBIUS_LLM_REQUIRED", self.probe()["detail"])
+        if self.calls >= self.max_calls:
+            raise ToolUnavailable("LLM_BUDGET_EXHAUSTED", "No authorized LLM calls remain.")
         converted, outstanding = [], []
         for i, source in enumerate(messages):
             message = dict(source)
@@ -88,7 +91,10 @@ class NebiusLLMProvider:
                 outstanding.remove(match)
                 message["tool_call_id"] = match[1]
             converted.append(message)
-        with httpx.Client(timeout=self.settings.llm_timeout_seconds) as client:
+        self.calls += 1
+        with httpx.Client(
+            timeout=self.settings.llm_timeout_seconds, follow_redirects=False
+        ) as client:
             response = client.post(
                 self.base + "/chat/completions",
                 headers={

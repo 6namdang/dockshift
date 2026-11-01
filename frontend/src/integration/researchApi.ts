@@ -1,4 +1,5 @@
 import { API_BASE, AgentRunResult, AgentCapabilities, Prediction, Profile, Paper } from '../dockshiftApi';
+import type { CollectiveOutput } from './CollectiveWorkflow';
 
 export interface ManagedRunResult extends AgentRunResult {
   outputs?: ResearchOutputs;
@@ -33,6 +34,7 @@ export interface ScientificArtifact {
   data: unknown;
 }
 export interface ResearchOutputs {
+  collective?: CollectiveOutput;
   target?: Record<string, unknown>;
   screening?: { qsar: { predictions: Prediction[] }; profiles: { profiles: Profile[] };
     chemical_audit: Record<string, unknown>; model: unknown; versions: Record<string, string> };
@@ -41,6 +43,11 @@ export interface ResearchOutputs {
   literature?: { results: Paper[]; errors: Array<{ source: string; message: string }>; retrieval_status: string };
   docking?: unknown;
 }
+export const preflightResearch = (request: unknown, token: string) =>
+  call<unknown>('/api/v1/agents/preflight', {
+    method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(request),
+  });
 export const startResearch = (request: unknown, token: string) =>
   call<{ run_id: string; status: string }>('/api/v1/agents/research', {
     method: 'POST', headers: { 'content-type': 'application/json', Authorization: `Bearer ${token}` },

@@ -1,0 +1,460 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "$defs": {
+    "Molecule": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Caller-owned molecule identifier; preserved in results.",
+          "maxLength": 256,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "smiles": {
+          "description": "Molecular SMILES, including any intended stereochemistry.",
+          "maxLength": 16384,
+          "minLength": 1,
+          "title": "Smiles",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "smiles"
+      ],
+      "title": "Molecule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Screen small molecules with ADMET-AI: 41 learned ADMET/assay endpoints plus 11 calculated descriptors and alerts. Returns per-molecule scores with endpoint units and species; not a human-safety verdict. Supply exactly one of smiles, molecules, csv or sdf. Batch records retain caller IDs and row errors; up to 1000 molecules per operation. File inputs can use immutable tenant artifact references. No salt stripping or tautomer replacement is added. Unknown endpoint names are errors. Use small-molecule structures, not protein sequences; review applicability and assay definitions.",
+  "oneOf": [
+    {
+      "properties": {
+        "csv": {
+          "type": "null"
+        },
+        "molecules": {
+          "type": "null"
+        },
+        "sdf": {
+          "type": "null"
+        },
+        "smiles": {
+          "description": "De-novo generation mask, e.g. [*{20-30}]; bounds must satisfy 1 <= minimum <= maximum <= 512.",
+          "not": {
+            "type": "null"
+          }
+        }
+      },
+      "required": [
+        "smiles"
+      ]
+    },
+    {
+      "properties": {
+        "csv": {
+          "type": "null"
+        },
+        "molecules": {
+          "not": {
+            "type": "null"
+          }
+        },
+        "sdf": {
+          "type": "null"
+        },
+        "smiles": {
+          "description": "De-novo generation mask, e.g. [*{20-30}]; bounds must satisfy 1 <= minimum <= maximum <= 512.",
+          "type": "null"
+        }
+      },
+      "required": [
+        "molecules"
+      ]
+    },
+    {
+      "properties": {
+        "csv": {
+          "not": {
+            "type": "null"
+          }
+        },
+        "molecules": {
+          "type": "null"
+        },
+        "sdf": {
+          "type": "null"
+        },
+        "smiles": {
+          "description": "De-novo generation mask, e.g. [*{20-30}]; bounds must satisfy 1 <= minimum <= maximum <= 512.",
+          "type": "null"
+        }
+      },
+      "required": [
+        "csv"
+      ]
+    },
+    {
+      "properties": {
+        "csv": {
+          "type": "null"
+        },
+        "molecules": {
+          "type": "null"
+        },
+        "sdf": {
+          "not": {
+            "type": "null"
+          }
+        },
+        "smiles": {
+          "description": "De-novo generation mask, e.g. [*{20-30}]; bounds must satisfy 1 <= minimum <= maximum <= 512.",
+          "type": "null"
+        }
+      },
+      "required": [
+        "sdf"
+      ]
+    }
+  ],
+  "properties": {
+    "csv": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "maxLength": 16777216,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "CSV content with a SMILES column. The platform also accepts an immutable tenant artifact reference here.",
+          "title": "Csv"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+          "properties": {
+            "artifact_id": {
+              "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "compression": {
+              "const": "none",
+              "default": "none",
+              "description": "Artifact input must be stored without transport compression."
+            },
+            "media_type": {
+              "description": "Media type of the uploaded bytes.",
+              "enum": [
+                "text/csv",
+                "text/plain"
+              ],
+              "type": "string"
+            },
+            "sha256": {
+              "description": "SHA-256 of the exact uploaded bytes.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "size_bytes": {
+              "description": "Exact uploaded byte count.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "artifact_id",
+            "sha256",
+            "size_bytes",
+            "media_type",
+            "compression"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "CSV content with a SMILES column. The platform also accepts an immutable tenant artifact reference here. Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+      "x-fs2-artifact-materialization": "utf-8",
+      "x-fs2-artifact-max-bytes": 16777216,
+      "x-fs2-artifact-media-types": [
+        "text/csv",
+        "text/plain"
+      ]
+    },
+    "endpoints": {
+      "anyOf": [
+        {
+          "items": {
+            "enum": [
+              "AMES",
+              "BBB_Martins",
+              "BRENK_alert",
+              "Bioavailability_Ma",
+              "CYP1A2_Veith",
+              "CYP2C19_Veith",
+              "CYP2C9_Substrate_CarbonMangels",
+              "CYP2C9_Veith",
+              "CYP2D6_Substrate_CarbonMangels",
+              "CYP2D6_Veith",
+              "CYP3A4_Substrate_CarbonMangels",
+              "CYP3A4_Veith",
+              "Caco2_Wang",
+              "Carcinogens_Lagunin",
+              "Clearance_Hepatocyte_AZ",
+              "Clearance_Microsome_AZ",
+              "ClinTox",
+              "DILI",
+              "HIA_Hou",
+              "Half_Life_Obach",
+              "HydrationFreeEnergy_FreeSolv",
+              "LD50_Zhu",
+              "Lipinski",
+              "Lipophilicity_AstraZeneca",
+              "NIH_alert",
+              "NR-AR",
+              "NR-AR-LBD",
+              "NR-AhR",
+              "NR-Aromatase",
+              "NR-ER",
+              "NR-ER-LBD",
+              "NR-PPAR-gamma",
+              "PAINS_alert",
+              "PAMPA_NCATS",
+              "PPBR_AZ",
+              "Pgp_Broccatelli",
+              "QED",
+              "SR-ARE",
+              "SR-ATAD5",
+              "SR-HSE",
+              "SR-MMP",
+              "SR-p53",
+              "Skin_Reaction",
+              "Solubility_AqSolDB",
+              "VDss_Lombardo",
+              "hERG",
+              "hydrogen_bond_acceptors",
+              "hydrogen_bond_donors",
+              "logP",
+              "molecular_weight",
+              "stereo_centers",
+              "tpsa"
+            ],
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional endpoint IDs from this App's metadata. Omit for the full panel; unknown IDs are rejected.",
+      "title": "Endpoints"
+    },
+    "id_column": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional CSV identifier column; otherwise stable row IDs are generated.",
+      "title": "Id Column"
+    },
+    "molecules": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Molecule"
+              },
+              "maxItems": 1000,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Ordered molecule records. Duplicate structures are preserved, but IDs must be unique.",
+          "title": "Molecules"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+          "properties": {
+            "artifact_id": {
+              "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "compression": {
+              "const": "none",
+              "default": "none",
+              "description": "Artifact input must be stored without transport compression."
+            },
+            "media_type": {
+              "description": "Media type of the uploaded bytes.",
+              "enum": [
+                "application/json"
+              ],
+              "type": "string"
+            },
+            "sha256": {
+              "description": "SHA-256 of the exact uploaded bytes.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "size_bytes": {
+              "description": "Exact uploaded byte count.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "artifact_id",
+            "sha256",
+            "size_bytes",
+            "media_type",
+            "compression"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Ordered molecule records. Duplicate structures are preserved, but IDs must be unique. Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+      "x-fs2-artifact-materialization": "json",
+      "x-fs2-artifact-max-bytes": 16777216,
+      "x-fs2-artifact-media-types": [
+        "application/json"
+      ]
+    },
+    "sdf": {
+      "anyOf": [
+        {
+          "anyOf": [
+            {
+              "maxLength": 16777216,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SDF content. Each record is converted to isomeric SMILES; coordinates are not model inputs.",
+          "title": "Sdf"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+          "properties": {
+            "artifact_id": {
+              "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            "compression": {
+              "const": "none",
+              "default": "none",
+              "description": "Artifact input must be stored without transport compression."
+            },
+            "media_type": {
+              "description": "Media type of the uploaded bytes.",
+              "enum": [
+                "chemical/x-mdl-sdfile",
+                "text/plain"
+              ],
+              "type": "string"
+            },
+            "sha256": {
+              "description": "SHA-256 of the exact uploaded bytes.",
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "size_bytes": {
+              "description": "Exact uploaded byte count.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "artifact_id",
+            "sha256",
+            "size_bytes",
+            "media_type",
+            "compression"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "SDF content. Each record is converted to isomeric SMILES; coordinates are not model inputs. Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+      "x-fs2-artifact-materialization": "utf-8",
+      "x-fs2-artifact-max-bytes": 16777216,
+      "x-fs2-artifact-media-types": [
+        "chemical/x-mdl-sdfile",
+        "text/plain"
+      ]
+    },
+    "smiles": {
+      "anyOf": [
+        {
+          "maxLength": 16384,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "One molecule; alternatively supply molecules, csv or sdf.",
+      "title": "Smiles"
+    },
+    "smiles_column": {
+      "default": "smiles",
+      "description": "CSV column containing molecular SMILES; defaults to smiles.",
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Smiles Column",
+      "type": "string"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "title": "ADMETRequest"
+}

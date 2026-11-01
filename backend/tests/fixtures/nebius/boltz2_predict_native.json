@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "$defs": {
+    "A3M": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment": {
+          "anyOf": [
+            {
+              "maxLength": 33554432,
+              "minLength": 3,
+              "title": "Alignment",
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "description": "Tenant-owned artifact reference. Upload and finalize the bytes before submitting this model call.",
+              "properties": {
+                "artifact_id": {
+                  "description": "Caller-owned immutable artifact UUID returned after upload finalization.",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "compression": {
+                  "const": "none",
+                  "default": "none",
+                  "description": "Artifact input must be stored without transport compression."
+                },
+                "media_type": {
+                  "description": "Media type of the uploaded bytes.",
+                  "enum": [
+                    "text/x-a3m",
+                    "text/plain"
+                  ],
+                  "type": "string"
+                },
+                "sha256": {
+                  "description": "SHA-256 of the exact uploaded bytes.",
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "size_bytes": {
+                  "description": "Exact uploaded byte count.",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "artifact_id",
+                "sha256",
+                "size_bytes",
+                "media_type",
+                "compression"
+              ],
+              "type": "object"
+            }
+          ],
+          "description": "Model input Prefer an artifact reference for nontrivial files so clients never serialize file bytes through an LLM.",
+          "x-fs2-artifact-materialization": "utf-8",
+          "x-fs2-artifact-max-bytes": 16777216,
+          "x-fs2-artifact-media-types": [
+            "text/x-a3m",
+            "text/plain"
+          ]
+        },
+        "format": {
+          "const": "a3m",
+          "default": "a3m",
+          "description": "Alignment serialization format.",
+          "title": "Format",
+          "type": "string"
+        },
+        "rank": {
+          "default": 0,
+          "description": "Accepted for compatibility but NOT consumed by the current Boltz2 adapter.",
+          "minimum": 0,
+          "title": "Rank",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "alignment"
+      ],
+      "title": "A3M",
+      "type": "object"
+    },
+    "MSA": {
+      "additionalProperties": false,
+      "properties": {
+        "msa_search": {
+          "$ref": "#/$defs/MSASearch",
+          "description": "Required nesting for the supplied alignment; this name does not trigger an MSA search."
+        }
+      },
+      "required": [
+        "msa_search"
+      ],
+      "title": "MSA",
+      "type": "object"
+    },
+    "MSASearch": {
+      "additionalProperties": false,
+      "properties": {
+        "a3m": {
+          "$ref": "#/$defs/A3M",
+          "description": "A3M alignment object."
+        }
+      },
+      "required": [
+        "a3m"
+      ],
+      "title": "MSASearch",
+      "type": "object"
+    },
+    "Polymer": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Caller-chosen protein chain identifier.",
+          "maxLength": 8,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "molecule_type": {
+          "const": "protein",
+          "description": "The portable Boltz2 endpoint supports proteins only.",
+          "title": "Molecule Type",
+          "type": "string"
+        },
+        "msa": {
+          "$ref": "#/$defs/MSA",
+          "description": "Caller-supplied alignment. This endpoint does not perform online MSA search."
+        },
+        "sequence": {
+          "description": "Amino-acid sequence; see this field's alphabet and length constraints.",
+          "maxLength": 2048,
+          "minLength": 6,
+          "pattern": "^[acdefghiklmnpqrstvwyACDEFGHIKLMNPQRSTVWY\\s]+$",
+          "title": "Sequence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "molecule_type",
+        "sequence",
+        "msa"
+      ],
+      "title": "Polymer",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Predict proteins from chains and supplied A3M; returns mmCIF structures and confidence scores. Portable protein-only Boltz2, not the full NVIDIA NIM contract. Supply A3M explicitly. No ligands, affinity prediction, templates, seed or online MSA search.",
+  "properties": {
+    "diffusion_samples": {
+      "default": 1,
+      "description": "Number of diffusion predictions generated by this request.",
+      "maximum": 8,
+      "minimum": 1,
+      "title": "Diffusion Samples",
+      "type": "integer"
+    },
+    "output_format": {
+      "const": "mmcif",
+      "default": "mmcif",
+      "description": "Structure serialization produced by this runtime.",
+      "title": "Output Format",
+      "type": "string"
+    },
+    "polymers": {
+      "description": "Protein chains with caller-supplied A3M alignments. This runtime does not accept ligands.",
+      "items": {
+        "$ref": "#/$defs/Polymer"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Polymers",
+      "type": "array"
+    },
+    "recycling_steps": {
+      "default": 3,
+      "description": "Number of model recycling iterations.",
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Recycling Steps",
+      "type": "integer"
+    },
+    "sampling_steps": {
+      "default": 200,
+      "description": "Number of diffusion sampling steps.",
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Sampling Steps",
+      "type": "integer"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 200,
+      "description": "Reuse this key with identical inputs after a lost response."
+    },
+    "wait_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 30,
+      "description": "Wait at most this many seconds; otherwise poll the returned operation ID."
+    }
+  },
+  "required": [
+    "polymers"
+  ],
+  "title": "PredictRequest"
+}

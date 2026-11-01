@@ -7,9 +7,8 @@ from dataclasses import asdict
 from importlib.metadata import version
 
 from app.literature.models import SearchRequest
-from app.nebius.receptor import ensure_receptor, receptor_for, sites
 
-from .remote import RemoteRunner, objects
+from .remote import RemoteRunner
 from .scienceclaw.adapters.base import ToolUnavailable
 from .scienceclaw.adapters.chemistry import RDKitAdapter
 from .scienceclaw.contracts import AgentEvent, ArtifactRef, Channel, Metric, WorkerState
@@ -54,7 +53,7 @@ class CandidateWorkflow:
         return await self.tools.dispatch_advanced(agent)
 
     async def identity(self):
-        if len(self.request.compounds) != 1:
+        if self.request.workflow != "collective" and len(self.request.compounds) != 1:
             raise ToolUnavailable(
                 "ONE_CANDIDATE_REQUIRED", "Candidate workflow accepts one compound."
             )
@@ -91,6 +90,8 @@ class CandidateWorkflow:
             "sequence_sha256": hashlib.sha256(sequence.encode()).hexdigest(),
             "verification": "Primary accession, taxon and gene checked against live UniProt",
         }
+        if self.request.workflow == "collective":
+            identity["sequence"] = sequence
         self.outputs["target"] = identity
         result = {"target": identity}
         if self.request.literature_query:
@@ -289,25 +290,49 @@ class CandidateWorkflow:
         }
 
     async def dock(self):
+        """Execute only a reviewed, hash-bound BIBR1532 reference-redocking plan."""
+        from .scientific_preparation import validate_diffdock
+        from .service import IntegrationService
+
         t = self.tools
-        if not t.settings.agent_compute_enabled:
+        operation_id = self.request.resume_operations.get("A5a_diffdock")
+        if not operation_id and not t.settings.agent_compute_enabled:
+            raise ToolUnavailable("COMPUTE_APPROVAL_REQUIRED", "Docking awaits compute approval.")
+        if not self.request.docking_preparation_id or not self.request.docking_reviewed_by:
             raise ToolUnavailable(
-                "COMPUTE_APPROVAL_REQUIRED", "Docking awaits expensive-compute approval."
+                "DOCKING_PREPARATION_REQUIRED",
+                "A sealed preparation run and named scientist review are required.",
             )
+        store = IntegrationService(t.settings, t.literature, t.qsar, t.structural, t.nebius)
+        preparation_id = self.request.docking_preparation_id
+        plan = json.loads(store.artifact(preparation_id, "docking_plan.json").read_text())
+        arguments_path = store.artifact(preparation_id, "diffdock_arguments.json")
+        reference_path = store.artifact(preparation_id, "reference_55C.sdf")
+        if (
+            hashlib.sha256(arguments_path.read_bytes()).hexdigest() != plan["arguments_sha256"]
+            or hashlib.sha256(reference_path.read_bytes()).hexdigest()
+            != plan["reference_sdf_sha256"]
+        ):
+            raise ValueError("Reviewed docking plan files no longer match their hashes")
         row = self.outputs["screening"]["qsar"]["predictions"][0]
-        # Reuse the teammate receptor preparation and exact known site; no new docking engine.
-        await ensure_receptor(t.qsar.client, t.settings)
-        site = sites()[0]
-        receptor = receptor_for(site.centroid, 18.0)
-        result = await self.remote.execute(
-            "A5a_diffdock",
-            "infer_diffdock_native",
+        if row["smiles"] != plan["ligand_smiles"]:
+            raise ToolUnavailable(
+                "REFERENCE_LIGAND_MISMATCH",
+                "This preparation supports the deposited BIBR1532 benchmark only.",
+            )
+        arguments = json.loads(arguments_path.read_text())
+        if hashlib.sha256(arguments["protein"].encode()).hexdigest() != plan["receptor_sha256"]:
+            raise ValueError("Receptor bytes changed since preparation")
+        self.save(
+            "A5a_reviewed_plan.json",
             {
-                "protein": receptor,
-                "ligand": row["smiles"],
-                "num_poses": 1,
+                "plan": plan,
+                "reviewed_by": self.request.docking_reviewed_by,
+                "scope": "Input review attestation; separate compute approval still required",
             },
-            self.request.resume_operations.get("A5a_diffdock"),
+        )
+        result = await self.remote.execute(
+            "A5a_diffdock", "infer_diffdock_native", arguments, operation_id
         )
         self.outputs["docking"] = result
         if result["status"] != "SUCCEEDED":
@@ -316,17 +341,36 @@ class CandidateWorkflow:
                 "_error_code": "REMOTE_OPERATION_PENDING",
                 **result,
             }, "Nebius docking pending; pose confidence is not affinity."
-        poses = [
-            v.get("ligand_positions")
-            for a in result["artifacts"]
-            for v in objects(a["data"])
-            if v.get("ligand_positions")
-        ]
-        if not poses:
-            raise ToolUnavailable(
-                "DOCKING_POSES_UNVERIFIED", "No actual pose structures in verified artifacts."
-            )
-        return (
-            result,
-            "Nebius pose artifact verified; reference-pose and biological review still required.",
+        validation = validate_diffdock(
+            result, row["smiles"], reference_path, plan["redocking_rmsd_threshold_angstrom"]
         )
+        self.outputs["docking"]["validation"] = validation
+        self.save("A5a_pose_validation.json", validation)
+        t.ledger.append(
+            AgentEvent(
+                run_id=t.run_id,
+                agent="A5a.redocking",
+                event_type="DIFFDOCK_REFERENCE_VALIDATED",
+                status=WorkerState.SUCCEEDED,
+                channel=Channel.HUMAN_DOCKING,
+                outputs=[ArtifactRef.of(t.out / "A5a_pose_validation.json", "pose_validation")],
+                input_artifact_hashes=[plan["receptor_sha256"], plan["reference_sdf_sha256"]],
+                metrics=[
+                    Metric.computed(
+                        "reference_pose_rmsd",
+                        validation["poses"][0]["same_frame_symmetry_corrected_rmsd_angstrom"],
+                        "angstrom",
+                        "RDKit symmetry-aware CalcRMS; unaligned deposited receptor frame",
+                    )
+                ],
+            )
+        )
+        if validation["reference_redocking_qc"] != "PASS":
+            return {
+                "_status": "FAILED",
+                "_error_code": "REFERENCE_REDOCKING_QC_FAILED",
+                "validation": validation,
+            }, "Docking ran; reference-pose QC failed."
+        return {
+            "validation": validation
+        }, "Reference pose passed declared RMSD QC; affinity not computed."

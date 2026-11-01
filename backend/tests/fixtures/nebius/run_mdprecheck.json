@@ -1,0 +1,175 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "description": "Check GROMACS geometry, topology, sequence, chemistry, environment and run parameters. Optional CPU grompp/energy/minimization/stability probes. Produces a verdict, JSON findings and HTML report; never changes inputs. A completed check may report fail or warn. No finding is proof of scientific validity.",
+  "properties": {
+    "chain_names": {
+      "maxLength": 2048,
+      "type": "string"
+    },
+    "coords": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "define": {
+      "default": [],
+      "items": {
+        "maxLength": 256,
+        "pattern": "^[A-Za-z_]\\w*(=[^\\n]*)?$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "fasta": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "input": {
+      "additionalProperties": false,
+      "description": "Uploaded tar/tar.gz/zip bundle or standalone GROMACS TPR; not a local path.",
+      "properties": {
+        "artifact_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "compression": {
+          "const": "none"
+        },
+        "media_type": {
+          "enum": [
+            "application/gzip",
+            "application/octet-stream",
+            "application/x-tar",
+            "application/zip"
+          ],
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 4294967296,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "sha256",
+        "size_bytes",
+        "media_type",
+        "compression"
+      ],
+      "type": "object",
+      "x-fs2-artifact-materialization": "download-url",
+      "x-fs2-artifact-max-bytes": 4294967296,
+      "x-fs2-artifact-media-types": [
+        "application/gzip",
+        "application/octet-stream",
+        "application/x-tar",
+        "application/zip"
+      ]
+    },
+    "input_format": {
+      "enum": [
+        "tar.gz",
+        "tar",
+        "zip",
+        "tpr"
+      ],
+      "type": "string"
+    },
+    "intent": {
+      "default": [],
+      "description": "Scientific intent, e.g. dt=0.002, hmr=no, length_ns=100, stage=production.",
+      "items": {
+        "maxLength": 512,
+        "pattern": "^[A-Za-z_][\\w.-]*(=[^\\n]*)?$",
+        "type": "string"
+      },
+      "maxItems": 32,
+      "type": "array"
+    },
+    "mdp": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "ndx": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "nsteps": {
+      "default": 5000,
+      "description": "Steps for optional short probes, not the production simulation length.",
+      "maximum": 100000,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "probes": {
+      "default": [],
+      "description": "Optional CPU GROMACS probes; default static checks only. Source files required.",
+      "items": {
+        "enum": [
+          "grompp",
+          "energy",
+          "minimize",
+          "stability"
+        ]
+      },
+      "maxItems": 4,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "threads": {
+      "default": 2,
+      "maximum": 2,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "top": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "tpr": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "workflow": {
+      "description": "Relative file path inside the uploaded bundle; never an absolute or external path.",
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)[.])[^\\\\\\u0000-\\u001f]+$",
+      "type": "string"
+    },
+    "output_prefix": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "description": "Directory in your assigned bucket for automatic result.json, artifacts and manifest.json delivery. Defaults to runs/<model-id>; the operation ID is appended. Never sent to the model."
+    }
+  },
+  "required": [
+    "input",
+    "input_format"
+  ]
+}
