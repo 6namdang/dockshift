@@ -8,6 +8,7 @@
  *   predicted  QSAR model output, ~0.5 log unit error
  *   computed   produced by an external engine this run (DiffDock, AlphaFold)
  *   derived    arithmetic on the above, nothing new
+ *   reference  from a stored result set, not produced by an engine this run
  *   pending    the stage has not produced it yet
  */
 
@@ -28,7 +29,13 @@ export type StageState =
   | 'blocked'
   | 'skipped';
 
-export type Origin = 'measured' | 'predicted' | 'computed' | 'derived' | 'pending';
+export type Origin =
+  | 'measured'
+  | 'predicted'
+  | 'computed'
+  | 'derived'
+  | 'reference'
+  | 'pending';
 
 export interface Metric {
   label: string;

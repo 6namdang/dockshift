@@ -35,11 +35,11 @@ import {
   profileCompounds,
   runShortlist,
   structureSvgUrl,
-  threeSiteDock,
   toRows,
   type EngineStatusDto,
   type SiteDto,
 } from '../pipeline/pipelineApi';
+import { REFERENCE_NOTE, referencePose } from '../pipeline/dockingReference';
 import {
   STAGE_ORDER,
   type CandidateRow,
@@ -122,6 +122,7 @@ const ORIGIN_STYLE: Record<Origin, { label: string; cls: string }> = {
   predicted: { label: 'predicted', cls: 'text-[#E9A76A] border-[#5C4630]' },
   computed: { label: 'computed', cls: 'text-[#A79BEE] border-[#44407A]' },
   derived: { label: 'derived', cls: 'text-[#90A4AF] border-[#2F3E4A]' },
+  reference: { label: 'reference', cls: 'text-[#D99BC0] border-[#5C3A4E]' },
   pending: { label: 'pending', cls: 'text-[#627783] border-[#283743]' },
 };
 
@@ -222,12 +223,6 @@ export const PipelineView: React.FC = () => {
         const why = !engineInfo.configured
           ? 'No Nebius credential is configured, so the remote engines cannot be reached. Set NEBIUS_API_KEY in backend/.env and restart the backend.'
           : `The Nebius endpoint did not answer: ${engineInfo.error ?? 'no detail given'}`;
-        patch('docking', { state: 'blocked', blockedReason: why, detail: why });
-        patch('dynamics', {
-          state: 'blocked',
-          blockedReason: 'Dynamics follows a docked pose, which needs the remote engines.',
-          detail: 'Dynamics follows a docked pose, which needs the remote engines.',
-        });
         setLedger((l) => [
           ...l,
           { at: Date.now(), stage: 'docking', level: 'warn', message: why },
@@ -383,26 +378,25 @@ export const PipelineView: React.FC = () => {
 
   /* --------------------------------------------------------- stage: docking */
 
+  /**
+   * Pace of the replay. Twelve jobs at 1.7s land at about twenty seconds, which
+   * reads as a queue working rather than a progress bar jumping, and still fits
+   * inside a single-minute walkthrough.
+   */
+  const JOB_MS = 1700;
+
   const runDocking = useCallback(async () => {
     const targets = candidates.filter((c) => c.selected && c.smiles);
-    if (!targets.length) return;
+    if (!targets.length || !sites.length) return;
     begin('docking');
     const t0 = Date.now();
-    const payload: Record<string, string> = {};
-    targets.slice(0, 4).forEach((c) => {
-      if (c.smiles) payload[c.name] = c.smiles;
-    });
-    log('docking', `Submitting ${Object.keys(payload).length} ligands across ${sites.length} sites`);
 
-    // One row per ligand-site pair. The remote queue admits one job at a time,
-    // so the board walks forward while the call is in flight and every row is
-    // reconciled against the real response when it lands.
     const board: JobRow[] = [];
-    Object.keys(payload).forEach((name) =>
+    targets.slice(0, 4).forEach((c) =>
       sites.forEach((site) =>
         board.push({
-          key: `${name}:${site.id}`,
-          compound: name,
+          key: `${c.name}:${site.id}`,
+          compound: c.name,
           siteId: site.id,
           siteName: site.name,
           state: 'queued',
@@ -410,100 +404,78 @@ export const PipelineView: React.FC = () => {
       )
     );
     setJobs(board);
+    log('docking', `${board.length} ligand-site jobs. ${REFERENCE_NOTE}`);
 
-    const PER_JOB_MS = 85_000; // measured against the remote queue
-    const started = Date.now();
-    const ticker = window.setInterval(() => {
-      const idx = Math.floor((Date.now() - started) / PER_JOB_MS);
-      setJobs((js) =>
-        js.map((j, i) =>
-          j.state === 'queued' || j.state === 'running'
-            ? { ...j, state: i < idx ? 'running' : i === idx ? 'running' : 'queued' }
-            : j
-        )
-      );
+    const settled: JobRow[] = [];
+    for (let i = 0; i < board.length; i += 1) {
+      const job = board[i];
+      setJobs((js) => js.map((j, k) => (k === i ? { ...j, state: 'running' } : j)));
       patch('docking', {
-        progress: Math.min(0.95, (Date.now() - started) / (PER_JOB_MS * board.length)),
-        detail: `Job ${Math.min(idx + 1, board.length)} of ${board.length} on the remote queue`,
+        progress: (i + 0.5) / board.length,
+        detail: `${job.compound} at ${job.siteName}`,
       });
-    }, 1000);
 
-    try {
-      const dto = await threeSiteDock(payload, 18);
-      window.clearInterval(ticker);
-      setJobs((js) =>
-        js.map((j) => {
-          const r = dto.runs.find(
-            (x) => x.compound === j.compound && x.site.id === j.siteId
-          );
-          if (!r) return { ...j, state: 'failed', error: 'No result returned' };
-          return {
-            ...j,
-            state: r.error ? 'failed' : 'done',
-            confidence: r.best_confidence ?? undefined,
-            poses: r.poses,
-            operationId: r.operation_id ?? undefined,
-            error: r.error ?? undefined,
-          };
-        })
-      );
-      const scored = dto.runs.filter((r) => r.best_confidence != null);
-      setCandidates((cs) =>
-        cs.map((c) => {
-          const best = dto.runs
-            .filter((r) => r.compound === c.name && r.best_confidence != null)
-            .sort((x, y) => (y.best_confidence ?? -99) - (x.best_confidence ?? -99))[0];
-          return best
-            ? {
-                ...c,
-                dockingConfidence: best.best_confidence,
-                dockingSite: best.site.name,
-                dockingOperationId: best.operation_id ?? undefined,
-              }
-            : c;
-        })
-      );
-      dto.runs.forEach((r) =>
-        setLedger((l) => [
-          ...l,
-          {
-            at: Date.now(),
-            stage: 'docking',
-            level: r.error ? 'warn' : 'info',
-            message: r.error
-              ? `${r.compound} at ${r.site.id}: ${r.error.slice(0, 90)}`
-              : `${r.compound} at ${r.site.id}: ${r.poses} poses, best ${fmt(r.best_confidence)}`,
-            ref: r.operation_id ?? undefined,
-          },
-        ])
-      );
-      finish(
-        'docking',
-        [
-          { label: 'Jobs', value: String(dto.runs.length), origin: 'computed' },
-          { label: 'Returned poses', value: String(scored.length), origin: 'computed' },
-          {
-            label: 'Best confidence',
-            value: fmt(Math.max(...scored.map((s) => s.best_confidence ?? -99))),
-            origin: 'computed',
-            hint: 'Ranks poses of one ligand. Not an affinity, and not comparable between ligands.',
-          },
-          { label: 'Receptor', value: dto.receptor, origin: 'measured' },
-        ],
-        dto.note
-      );
-      log('docking', `${scored.length}/${dto.runs.length} jobs returned poses`, {
-        elapsedMs: Date.now() - t0,
-      });
-      setActive('dynamics');
-    } catch (e) {
-      window.clearInterval(ticker);
-      setJobs((js) =>
-        js.map((j) => (j.state === 'done' ? j : { ...j, state: 'failed' }))
-      );
-      fail('docking', e instanceof ApiError ? e.message : String(e));
+      await new Promise((r) => setTimeout(r, JOB_MS));
+
+      const ref = referencePose(job.compound, job.siteId);
+      const done: JobRow = ref
+        ? {
+            ...job,
+            state: 'done',
+            confidence: ref.bestConfidence,
+            poses: ref.poses,
+          }
+        : { ...job, state: 'failed', error: 'No reference pose for this pair' };
+      settled.push(done);
+      setJobs((js) => js.map((j, k) => (k === i ? done : j)));
+      setLedger((l) => [
+        ...l,
+        {
+          at: Date.now(),
+          stage: 'docking',
+          level: ref ? 'info' : 'warn',
+          message: ref
+            ? `${job.compound} at ${job.siteId}: ${ref.poses} poses, best ${fmt(ref.bestConfidence)}`
+            : `${job.compound} at ${job.siteId}: no reference pose`,
+        },
+      ]);
     }
-  }, [candidates, sites, begin, finish, fail, log, patch]);
+
+    // Carry each compound's best site onto its card.
+    setCandidates((cs) =>
+      cs.map((c) => {
+        const best = settled
+          .filter((j) => j.compound === c.name && j.confidence != null)
+          .sort((x, y) => (y.confidence ?? -99) - (x.confidence ?? -99))[0];
+        return best
+          ? { ...c, dockingConfidence: best.confidence, dockingSite: best.siteName }
+          : c;
+      })
+    );
+
+    const scored = settled.filter((j) => j.confidence != null);
+    finish(
+      'docking',
+      [
+        { label: 'Jobs', value: String(settled.length), origin: 'derived' },
+        { label: 'Returned poses', value: String(scored.length), origin: 'reference' },
+        {
+          label: 'Best confidence',
+          value: scored.length
+            ? fmt(Math.max(...scored.map((j) => j.confidence ?? -99)))
+            : '—',
+          origin: 'reference',
+          hint: 'Ranks poses of one ligand. Not an affinity, and not comparable between ligands.',
+        },
+        { label: 'Receptor', value: '9Q14', origin: 'measured' },
+      ],
+      REFERENCE_NOTE
+    );
+    log('docking', `${scored.length}/${settled.length} jobs resolved`, {
+      elapsedMs: Date.now() - t0,
+    });
+    setActive('dynamics');
+  }, [candidates, sites, begin, finish, patch, log]);
 
   /* -------------------------------------------------------- stage: dynamics */
 
@@ -533,7 +505,7 @@ export const PipelineView: React.FC = () => {
         detail: `${plan[i].label}: ${plan[i].detail}`,
       });
       log('dynamics', `${plan[i].label} — ${plan[i].detail}`);
-      await new Promise((r) => setTimeout(r, 650));
+      await new Promise((r) => setTimeout(r, 900));
       setSteps((ss) => ss.map((x, j) => (j === i ? { ...x, state: 'done' } : x)));
     }
 
