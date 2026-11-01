@@ -324,6 +324,15 @@ export const PipelineView: React.FC = () => {
     );
   }, []);
 
+  const selectAll = useCallback(
+    () => setCandidates((cs) => cs.map((c) => ({ ...c, selected: true }))),
+    []
+  );
+  const clearSelection = useCallback(
+    () => setCandidates((cs) => cs.map((c) => ({ ...c, selected: false }))),
+    []
+  );
+
   const confirmSelection = useCallback(() => {
     if (!selected.length) return;
     begin('selection');
@@ -746,7 +755,7 @@ export const PipelineView: React.FC = () => {
         {/* the stages, stacked */}
         {STAGE_ORDER.map((id, i) => {
           const st = stages[id];
-          const open = st.state !== 'idle';
+          const open = st.state !== 'idle' || id === nextActionable;
           return (
             <section
               key={id}
@@ -812,18 +821,26 @@ export const PipelineView: React.FC = () => {
                   {id === 'target' && engines && <EnginePanel status={engines} />}
                   {id === 'structure' && sites.length > 0 && <SitePanel sites={sites} />}
 
-                  {(id === 'candidates' || id === 'selection' || id === 'iterate') &&
-                    candidates.length > 0 && (
-                      <>
-                        {id === 'candidates' && <RankedPlot rows={candidates} />}
-                        <CandidateCards
-                          rows={candidates}
-                          onToggle={toggle}
-                          selectable={id === 'selection' || id === 'iterate'}
-                        />
-                        {id === 'candidates' && <ValueTable rows={candidates} />}
-                      </>
-                    )}
+                  {id === 'candidates' && candidates.length > 0 && (
+                    <>
+                      <RankedPlot rows={candidates} />
+                      <CandidateCards
+                        rows={candidates}
+                        onToggle={toggle}
+                        selectable={stages.candidates.state === 'complete'}
+                      />
+                      <ValueTable rows={candidates} />
+                    </>
+                  )}
+
+                  {id === 'selection' && candidates.length > 0 && (
+                    <SelectionSummary
+                      rows={candidates}
+                      onToggle={toggle}
+                      onSelectAll={selectAll}
+                      onClear={clearSelection}
+                    />
+                  )}
 
                   {id === 'iterate' && stages.iterate.state === 'complete' && <VinaTable />}
                   {id === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
@@ -1624,6 +1641,95 @@ const JobBoard: React.FC<{ jobs: JobRow[] }> = ({ jobs }) => {
         The remote queue admits one job at a time, so these run in sequence.
         {failed > 0 && ` ${failed} did not return a pose.`}
       </p>
+    </section>
+  );
+};
+
+const SelectionSummary: React.FC<{
+  rows: CandidateRow[];
+  onToggle: (name: string) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
+}> = ({ rows, onToggle, onSelectAll, onClear }) => {
+  const chosen = rows.filter((r) => r.selected);
+  return (
+    <section>
+      <div className="flex items-center gap-2 mb-3">
+        <Layers size={13} className="text-[#4C8B84]" />
+        <h2 className="text-[11px] uppercase tracking-[0.14em] text-[#90A4AF]">
+          Carry forward ({chosen.length} of {rows.length})
+        </h2>
+        <div className="ml-auto flex gap-2">
+          <button
+            onClick={onSelectAll}
+            className="text-[11px] text-[#90A4AF] border border-[#2A3A48] rounded px-2 py-1 hover:bg-[#18232D]"
+          >
+            Select all
+          </button>
+          <button
+            onClick={onClear}
+            className="text-[11px] text-[#90A4AF] border border-[#2A3A48] rounded px-2 py-1 hover:bg-[#18232D]"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-[#202F3C] overflow-hidden divide-y divide-[#1B2833]">
+        {rows.map((r) => (
+          <button
+            key={r.name}
+            onClick={() => onToggle(r.name)}
+            className={`w-full text-left flex items-center gap-3 px-4 py-2.5 transition-colors ${
+              r.selected ? 'bg-[#16242E]' : 'hover:bg-[#121C25]'
+            }`}
+          >
+            <span
+              className={`shrink-0 h-[18px] w-[18px] rounded grid place-items-center border ${
+                r.selected ? 'bg-[#59C9C0] border-[#59C9C0]' : 'border-[#3A4C59]'
+              }`}
+            >
+              {r.selected && <Check size={12} className="text-[#06231F]" />}
+            </span>
+
+            {r.smiles && (
+              <img
+                src={structureSvgUrl(r.smiles, 96)}
+                alt=""
+                className="h-9 w-9 rounded bg-white shrink-0 object-contain"
+                loading="lazy"
+              />
+            )}
+
+            <span
+              className={`text-[13px] flex-1 truncate ${
+                r.selected ? 'text-[#E9F0F3]' : 'text-[#7E939F]'
+              }`}
+            >
+              {r.name}
+            </span>
+
+            <span className="font-mono text-[12px] text-[#E9A76A] tabular-nums">
+              {fmt(r.predictedPic50)}
+            </span>
+            <span
+              className={`text-[10px] px-1.5 py-[1px] rounded border shrink-0 ${
+                r.domain === 'out'
+                  ? 'text-[#E9A76A] border-[#5C4630]'
+                  : 'text-[#59C9C0] border-[#2A5F5C]'
+              }`}
+            >
+              {r.domain === 'out' ? 'outside' : 'in domain'}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {chosen.length === 0 && (
+        <p className="text-[11px] text-[#E9A76A] mt-2">
+          Nothing selected. Pick at least one candidate to continue.
+        </p>
+      )}
     </section>
   );
 };
