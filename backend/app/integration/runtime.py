@@ -7,6 +7,8 @@ import hashlib
 import uuid
 from dataclasses import asdict, replace
 
+from .anthropic_llm import AnthropicLLMProvider
+from .llm_provider import requested_provider
 from .nebius_llm import NebiusLLMProvider
 from .privacy import Redactor
 from .scienceclaw.contracts import ArtifactRef
@@ -44,22 +46,24 @@ class DockshiftRuntime(AgentRuntime):
         self.science, self.loop = science, loop
         self.redact = Redactor(science.settings)
         self.trace = Trace(self.out / "agent_execution_trace.jsonl", self.run_id)
-        self.provider = provider or (
-            NebiusLLMProvider(
-                science.settings,
-                max_calls=(
-                    (
-                        science.request.budget.max_llm_calls
-                        if science.request.budget.approved_by
-                        else 0
-                    )
-                    if science.request.workflow == "collective"
-                    else 64
-                ),
-            )
-            if science.request.use_nebius_llm and science.request.workflow != "preparation"
-            else DisabledProvider()
+        self.provider_name = requested_provider(science.settings, science.request)
+        max_calls = (
+            (science.request.budget.max_llm_calls if science.request.budget.approved_by else 0)
+            if science.request.workflow in ("collective", "demonstration")
+            else 64
         )
+        if provider is not None:
+            self.provider = provider
+        elif self.provider_name == "anthropic":
+            self.provider = AnthropicLLMProvider(
+                science.settings,
+                max_calls=max_calls,
+                max_cost_usd=science.request.budget.max_llm_cost_usd,
+            )
+        elif self.provider_name == "nebius":
+            self.provider = NebiusLLMProvider(science.settings, max_calls=max_calls)
+        else:
+            self.provider = DisabledProvider()
         self.probe = self.provider.probe()
         self.registry, self.latest = {}, {}
         self.results, self.handoffs, self.redesigns = [], [], []
@@ -95,6 +99,23 @@ class DockshiftRuntime(AgentRuntime):
                 )
                 for s in SPECS
             )
+        if science.request.workflow == "demonstration":
+            from .demonstration import DEMO_TOOLS
+
+            self.specs = tuple(
+                replace(
+                    s,
+                    tool=DEMO_TOOLS[s.agent_id],
+                    instructions=s.instructions
+                    + (
+                        " This is a read-only demonstration. Inspect the real returned summary "
+                        "and cite receipt hashes. Distinguish completed local audits from BLOCKED "
+                        "scientific execution. Call conclude after the tool receipt unless one "
+                        "evidence read is necessary."
+                    ),
+                )
+                for s in SPECS
+            )
         for spec in self.specs:
             self.trace.emit("agent_initialized", spec.agent_id, specification=asdict(spec))
 
@@ -108,9 +129,31 @@ class DockshiftRuntime(AgentRuntime):
         return execute
 
     def run(self):
+        prior, completed = None, set()
+        if self.science.request.workflow == "demonstration" and self.science.request.source_run:
+            from .demo_checkpoint import restore_demo
+
+            prior, completed = restore_demo(self)
         for spec in self.specs:
+            if spec.agent_id in completed:
+                continue
+            if self.science.request.workflow == "demonstration" and hasattr(
+                self.provider, "begin_agent"
+            ):
+                self.provider.begin_agent(spec.agent_id)
             self.science.progress(spec.agent_id, "RUNNING")
             result = self.invoke(spec, 0)
+            if prior:
+                old = next(r for r in prior["agents"] if r["agent"] == spec.agent_id)
+                result["prior_attempted_requests"] = prior["reasoning_usage"][
+                    "per_agent_requests"
+                ].get(spec.agent_id, 0)
+                result["llm_validated_responses"] = result["llm_inference_calls"]
+                result["prior_contract_errors"] = old["errors"]
+                # A schema-validation error proves that a model response existed.
+                invalid = sum("Additional properties are not allowed" in e for e in old["errors"])
+                result["llm_inference_calls"] += old["llm_inference_calls"] + invalid
+
             self.science.progress(spec.agent_id, result["scientific_status"], result["detail"])
         # Preserve A7's structured feedback without automatically starting more compute.
         decision = self.latest["A7"]["decision"]
@@ -169,10 +212,17 @@ class DockshiftRuntime(AgentRuntime):
                 else "BLOCKED",
                 "candidate_name": self.science.request.candidate_name,
                 "outputs": self.science.verified_outputs,
-                "review_provider": "nebius"
-                if self.science.request.use_nebius_llm
-                and self.science.request.workflow != "preparation"
-                else None,
+                "review_provider": self.provider_name,
+                "reasoning_usage": {
+                    "provider": self.provider_name,
+                    "model": self.probe.get("model"),
+                    "attempted_requests": getattr(self.provider, "calls", 0),
+                    "reserved_cost_usd": str(getattr(self.provider, "reserved_usd", 0)),
+                    "request_limit": getattr(self.provider, "max_calls", 0),
+                    "cost_limit_usd": str(getattr(self.provider, "budget", 0)),
+                    "per_agent_requests": getattr(self.provider, "agent_calls", {}),
+                    "usage": getattr(self.provider, "usage", []),
+                },
             }
         )
         bundle = self.redact(bundle)

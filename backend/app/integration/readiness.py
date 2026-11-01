@@ -56,7 +56,9 @@ async def preflight_run(request, client, settings):
         "nebius_discovery": discovery,
         "contracts": checked,
         "compute_gate_enabled": settings.agent_compute_enabled,
-        "llm_credentials_present": bool(settings.nebius_llm_api_key and settings.nebius_llm_model),
+        "llm_credentials_present": bool(settings.anthropic_api_key)
+        if settings.agent_llm_provider == "anthropic"
+        else bool(settings.nebius_llm_api_key and settings.nebius_llm_model),
         "llm_gate_enabled": settings.agent_llm_enabled,
         "optional_local_parsers": {
             n: importlib.util.find_spec(n) is not None

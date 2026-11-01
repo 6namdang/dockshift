@@ -65,13 +65,16 @@ class ExecutionBudget(StrictModel):
     max_designs: int = Field(1, ge=1, le=8)
     max_md_steps: int = Field(1_000_000, ge=1, le=10_000_000)
     max_llm_calls: int = Field(0, ge=0, le=64)
+    max_llm_cost_usd: float = Field(0.05, gt=0, le=1)
     max_wall_seconds: int = Field(3600, ge=60, le=86400)
     max_decodes: int = Field(32, ge=2, le=512)
     approved_by: str | None = Field(None, min_length=1, max_length=200)
 
 
 class RunRequest(StrictModel):
-    workflow: Literal["advanced", "candidate", "preparation", "collective"] = "advanced"
+    workflow: Literal["advanced", "candidate", "preparation", "collective", "demonstration"] = (
+        "advanced"
+    )
     branches: list[Literal["small_molecule", "biologic"]] = Field(
         default_factory=lambda: ["small_molecule", "biologic"], min_length=1, max_length=2
     )
@@ -86,6 +89,8 @@ class RunRequest(StrictModel):
     docking_preparation_id: str | None = Field(None, pattern=r"^agents-[0-9a-f]{32}$")
     docking_reviewed_by: str | None = Field(None, min_length=1, max_length=200)
     use_nebius_llm: bool = False
+    use_llm: bool = False
+    llm_provider: Literal["anthropic", "nebius"] | None = None
     resume_operations: dict[str, str] = Field(default_factory=dict)
     target: Target = Field(default_factory=Target)
     compounds: list[str] = Field(default_factory=list, max_length=12)

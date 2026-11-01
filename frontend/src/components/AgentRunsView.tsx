@@ -3,7 +3,7 @@ import { CollectiveControls, CollectiveReport } from '../integration/CollectiveW
 import {
   ManagedCapabilities as AgentCapabilities, ManagedRunResult as AgentRunResult, ResearchProgress,
   fetchResearchCapabilities, fetchResearchReport,
-  fetchResearchProgress, startResearch, resumeResearch, downloadResearchArtifact,
+  fetchResearchProgress, startResearch, resumeResearch, downloadResearchArtifact, startDemonstration,
 } from '../integration/researchApi';
 
 function saveBlob(blob: Blob, filename: string) {
@@ -18,16 +18,23 @@ export function AgentReport({ report, token = '' }: { report: AgentRunResult; to
   const outputs = report.outputs;
   return <section aria-label="Agent run report" className="space-y-4">
     <h2 className="text-lg font-semibold">Run {report.status}</h2>
+    {report.workflow === 'demonstration' && <p>Bounded hTERT / BIBR1532 demonstration · scientific computation disabled</p>}
+    {report.reasoning_usage && <p>Claude requests: {report.reasoning_usage.attempted_requests}/{report.reasoning_usage.request_limit} ·
+      Conservative cost reservation: ${report.reasoning_usage.reserved_cost_usd} / ${report.reasoning_usage.cost_limit_usd}</p>}
     {report.candidate_screening_status && <p>Candidate screen: {report.candidate_screening_status} · Full scientific workflow: {report.status}</p>}
     <p className="text-sm text-[#90A4AF] break-all">{report.run_id}</p>
+    {outputs?.demonstration_continuation && <p>Verified continuation of {outputs.demonstration_continuation.source_run};
+      completed workers reused without additional inference.</p>}
     <p>Ledger: {report.ledger_integrity.verified ? 'verified' : 'integrity failure'} ·
       LLM workers invoked: {report.llm_agents_invoked}/8 · Scientific review: {report.scientific_review}</p>
     <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-      <thead><tr>{['Agent', 'Science', 'Agent review', 'Evidence / blocker'].map(h =>
+      <thead><tr>{['Agent', 'LLM requests', 'Science', 'Reasoning decision', 'Evidence / blocker'].map(h =>
         <th key={h} className="p-2 border-b border-[#202F3C]">{h}</th>)}</tr></thead>
       <tbody>{report.agents.map(a => <tr key={a.agent}>
         <td className="p-2">{a.agent} · {a.role}</td>
-        <td className="p-2">{a.scientific_status}</td><td className="p-2">{a.agent_status}</td>
+        <td className="p-2">{a.llm_inference_calls}</td><td className="p-2">{a.scientific_status}</td><td className="p-2">
+          {a.llm_decision_completed ? 'VALID' : 'NOT COMPLETED'} · {a.agent_status}
+        </td>
         <td className="p-2">{a.detail}</td>
       </tr>)}</tbody>
     </table></div>
@@ -125,7 +132,7 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
         candidate_name: candidate?.name || compound, compounds: [compound],
         literature_query: query.trim() || null, remote_admet: true, docking,
         ...(docking ? { docking_preparation_id: preparationId, docking_reviewed_by: dockingReviewer } : {}),
-        use_nebius_llm: llm, target: { label: 'hTERT' } };
+        use_llm: llm, target: { label: 'hTERT' } };
       const result = resume ? await resumeResearch(runId, token) : await startResearch(payload, token);
       setRunId(result.run_id); setMonitorId(result.run_id);
     } catch (e) { setError(String(e)); setBusy(false); }
@@ -137,6 +144,17 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
       Docking/MD: {capabilities?.compute_enabled ? 'authorized' : 'blocked'}</p>
     <label className="block">Execution token<input type="password" autoComplete="off" value={token}
       onChange={e => setToken(e.target.value)} className="block w-full bg-[#18232D] border rounded p-2" /></label>
+    {capabilities?.demo_enabled && <section aria-label="Bounded demonstration" className="border rounded p-3 space-y-2">
+      <p>hTERT + BIBR1532 · eight Claude agents · maximum 24 requests / $0.10 · no remote scientific computation</p>
+      <button disabled={busy || !token || capabilities.demo_started} className="border rounded p-2" onClick={async () => {
+        setBusy(true); setError(''); setReport(null); setProgress(null);
+        try {
+          const result = await startDemonstration(token);
+          setCapabilities({ ...capabilities, demo_started: true });
+          setRunId(result.run_id); setMonitorId(result.run_id);
+        } catch (e) { setError(String(e)); setBusy(false); }
+      }}>Run bounded eight-agent demonstration</button>
+    </section>}
     <CollectiveControls token={token} onStarted={id => {
       setRunId(id); setMonitorId(id); setReport(null); setProgress(null); setBusy(true); setError('');
     }} />
@@ -145,7 +163,7 @@ export function AgentRunsView({ candidate }: { candidate?: { name: string; smile
     <label className="block">Literature query (optional)<input value={query} onChange={e => setQuery(e.target.value)}
       className="block w-full bg-[#18232D] border rounded p-2" /></label>
     <label className="block"><input type="checkbox" checked={llm} onChange={e => setLlm(e.target.checked)} />
-      Use Nebius LLM agent reviews ({capabilities?.llm?.available ? capabilities.llm.model : 'configuration required'})</label>
+      Use {capabilities?.llm?.provider === 'nebius' ? 'Nebius' : 'Claude'} agent reasoning ({capabilities?.llm?.available ? capabilities.llm.model : 'configuration required'})</label>
     <label className="block"><input type="checkbox" checked={docking} onChange={e => setDocking(e.target.checked)} />
       Request reviewed DiffDock redocking (requires prepared inputs and separate compute authorization)</label>
     {docking && <div className="space-y-2">

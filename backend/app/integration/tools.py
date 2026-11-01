@@ -116,6 +116,7 @@ class DockshiftTools:
         self.candidate_workflow = None
         self.scientific_preparation = None
         self.collective_workflow = None
+        self.demonstration_workflow = None
 
     def require_parents(self, agent):
         from .scienceclaw.runtime.engine import SPECS
@@ -123,6 +124,8 @@ class DockshiftTools:
         parents = next(s.parents for s in SPECS if s.agent_id == agent)
         if agent == "A7":
             return
+        if self.request.workflow == "demonstration":
+            parents = () if agent == "A1" else ("A1",)
         if self.request.workflow == "collective":
             # Branch-specific typed bindings are enforced by CollectiveWorkflow.
             parents = () if agent == "A1" else ("A1",)
@@ -228,9 +231,20 @@ class DockshiftTools:
             "artifacts": [asdict(artifact), *typed],
             "metrics": [asdict(m) for m in metrics],
             "limitations": payload.get("limitations", []),
+            **(
+                {"demonstration_summary": payload.get("demonstration_summary", {})}
+                if self.request.workflow == "demonstration"
+                else {}
+            ),
         }
 
     async def dispatch(self, agent):
+        if self.request.workflow == "demonstration":
+            from .demonstration import DemonstrationWorkflow
+
+            if self.demonstration_workflow is None:
+                self.demonstration_workflow = DemonstrationWorkflow(self)
+            return await self.demonstration_workflow.dispatch(agent)
         if self.request.workflow == "collective":
             from .collective import CollectiveWorkflow
 

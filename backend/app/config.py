@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -66,6 +67,15 @@ class Settings(BaseSettings):
     # Narrow authorization for one-molecule ADMET; never authorizes docking/MD.
     agent_admet_enabled: bool = False
     agent_llm_enabled: bool = False
+    agent_demo_enabled: bool = False
+    agent_demo_source_run: str | None = None
+    agent_llm_provider: Literal["anthropic", "nebius"] = "anthropic"
+    anthropic_api_key: SecretStr | None = None
+    anthropic_model: str = "claude-haiku-5-5"
+    anthropic_max_calls: int = Field(16, ge=0, le=64)
+    anthropic_max_cost_usd: float = Field(0.05, gt=0, le=1, allow_inf_nan=False)
+    anthropic_max_input_tokens: int = Field(16_000, ge=1024, le=50_000)
+    anthropic_max_output_tokens: int = Field(512, ge=128, le=2048)
     nebius_llm_api_key: SecretStr | None = None
     nebius_llm_base_url: str = "https://api.tokenfactory.nebius.com/v1"
     nebius_llm_model: str | None = None

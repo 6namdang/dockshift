@@ -10,8 +10,8 @@ from pathlib import Path
 from app.config import BACKEND_DIR
 from app.nebius.client import NebiusError, NebiusNotConfiguredError
 
+from .llm_provider import configured_provider
 from .models import RunRequest
-from .nebius_llm import NebiusLLMProvider
 from .privacy import Redactor
 from .runtime import SPECS, DockshiftRuntime, new_run_id
 from .tools import DockshiftTools, role_tools
@@ -28,6 +28,7 @@ class IntegrationService:
         self._progress_lock = threading.RLock()
         self._tasks = {}
         self._active = set()
+        self._demo_started = False
 
     async def capabilities(self):
         try:
@@ -44,7 +45,10 @@ class IntegrationService:
                 "error_code": error,
                 "compute_enabled": self.settings.agent_compute_enabled,
                 "admet_enabled": self.settings.agent_admet_enabled,
-                "llm": await asyncio.to_thread(NebiusLLMProvider(self.settings).probe),
+                "demo_enabled": self.settings.agent_demo_enabled,
+                "demo_started": self._demo_started,
+                "demo_source_run": self.settings.agent_demo_source_run,
+                "llm": await asyncio.to_thread(configured_provider(self.settings).probe),
                 "agents": [
                     {
                         "agent": agent,
@@ -73,6 +77,31 @@ class IntegrationService:
         return path
 
     def _prepare(self, request):
+        if self.settings.agent_demo_enabled:
+            if request.workflow != "demonstration":
+                raise ValueError("This server permits only the bounded demonstration run.")
+        if request.workflow == "demonstration":
+            if request.source_run != self.settings.agent_demo_source_run:
+                raise ValueError(
+                    "Demonstration continuation source differs from server authorization."
+                )
+            if not self.settings.agent_demo_enabled:
+                raise ValueError("Bounded demonstration is not enabled on this server.")
+            if self.settings.agent_compute_enabled or self.settings.agent_admet_enabled:
+                raise ValueError("Demonstration requires scientific computation disabled.")
+            if not (request.use_llm and request.llm_provider == "anthropic"):
+                raise ValueError("Demonstration requires explicit Claude reasoning.")
+            if (
+                request.budget.max_llm_calls > 24
+                or request.budget.max_llm_cost_usd > 0.10
+                or self.settings.anthropic_max_calls > 24
+                or self.settings.anthropic_max_cost_usd > 0.10
+            ):
+                raise ValueError("Demonstration exceeds its request or cost ceiling.")
+            with self._progress_lock:
+                if self._demo_started:
+                    raise ValueError("This one-shot demonstration was already admitted.")
+                self._demo_started = True
         if request.workflow == "collective":
             from .collective import audit_plan
 

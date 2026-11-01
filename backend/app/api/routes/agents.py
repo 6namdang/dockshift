@@ -46,6 +46,20 @@ async def research(request: RunRequest, integration: Service):
         raise HTTPException(422, str(exc)) from exc
 
 
+@router.post("/demonstration", status_code=202, dependencies=[Depends(authorize_structural_rest)])
+async def demonstration(integration: Service):
+    from app.integration.demonstration import demo_request
+
+    try:
+        return await integration.start(
+            demo_request().model_copy(
+                update={"source_run": integration.settings.agent_demo_source_run}
+            )
+        )
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
 @router.get("/runs/{run_id}/progress", dependencies=[Depends(authorize_structural_rest)])
 async def progress(run_id: str, integration: Service):
     try:

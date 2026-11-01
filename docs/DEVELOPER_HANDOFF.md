@@ -11,8 +11,9 @@ adapters under `backend/app/integration/` reuse Dockshift QSAR, literature,
 structural services and the existing authenticated Nebius MCP client. The
 imported eight-worker runtime executes A1, A2, A3, A4, A5a, A5b, A6 and A7.
 Typed artifact envelopes, SHA-256 checks, immutable run directories and the
-append-only evidence ledger connect stages. Token Factory is the only collective
-LLM provider; deterministic tools are explicitly distinguished from LLM agency.
+append-only evidence ledger connect stages. Claude is the default reasoning provider; explicit legacy Token Factory requests
+remain supported. See [Claude setup](CLAUDE_REASONING.md). Deterministic tools
+are explicitly distinguished from LLM agency.
 
 Frontend actions map to:
 
@@ -30,6 +31,10 @@ operations. New stages require a separately reviewed continuation. Source runs
 and input hashes must match; no existing artifacts are overwritten.
 
 ## Readiness and blockers
+
+Claude integration update: the bounded eight-agent browser demonstration completed
+real Claude reasoning for all workers, with scientific computation disabled. See
+[the demo report](BOUNDED_WEBSITE_DEMO.md) and [Claude setup](CLAUDE_REASONING.md).
 
 | Component | Verified here | Remaining requirement |
 |---|---|---|

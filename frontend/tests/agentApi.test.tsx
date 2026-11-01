@@ -113,7 +113,7 @@ test('collective controls expose non-computational preflight and explicit zero b
   assert.match(html, /small molecule and protein biologic branches/);
   assert.match(html, /Check prerequisites and Nebius contracts/);
   assert.match(html, /max_submissions/);
-  assert.match(html, /Missing Token Factory access stays blocked/);
+  assert.match(html, /Missing reasoning-provider access stays blocked/);
 });
 
 test('collective preflight calls only its authenticated read-only endpoint', async () => {
@@ -147,4 +147,18 @@ test('collective report separates branch blockers and preserves native model con
   assert.match(html, /iptm/);
   assert.match(html, /Synthetic fixture; no binding claim/);
   assert.doesNotMatch(html, /affinity =|pIC50 =|converged/);
+});
+
+test('bounded demonstration starts only through its authenticated endpoint', async () => {
+  const { startDemonstration } = await import('../src/integration/researchApi');
+  const original = globalThis.fetch;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  globalThis.fetch = async (url, init) => { calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ run_id: 'agents-fixture', status: 'QUEUED' })); };
+  try {
+    await startDemonstration('test-token');
+    assert.equal(calls[0].url, '/api/v1/agents/demonstration');
+    assert.equal(calls[0].init?.method, 'POST');
+    assert.equal(new Headers(calls[0].init?.headers).get('Authorization'), 'Bearer test-token');
+  } finally { globalThis.fetch = original; }
 });

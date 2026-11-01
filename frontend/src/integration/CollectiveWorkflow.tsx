@@ -17,7 +17,7 @@ export function CollectiveControls({ token, onStarted }: {
 }) {
   const [protocol, setProtocol] = useState(JSON.stringify({ workflow: 'collective',
     branches: ['small_molecule', 'biologic'], target: { label: 'hTERT', accession: 'O14746' },
-    use_nebius_llm: false, budget: { max_submissions: 0 }, steps: [],
+    use_llm: false, budget: { max_submissions: 0 }, steps: [],
   }, null, 2));
   const [preflight, setPreflight] = useState<unknown>(null);
   const [error, setError] = useState('');
@@ -49,7 +49,7 @@ export function CollectiveControls({ token, onStarted }: {
         Start reviewed collective run</button>
     </div>
     <p>Contract checks perform no scientific computation. Execution still requires server authorization,
-      a named reviewer, a submission budget and valid scientific inputs. Missing Token Factory access stays blocked.</p>
+      a named reviewer, a submission budget and valid scientific inputs. Missing reasoning-provider access stays blocked.</p>
     {preflight != null && <pre aria-label="Collective preflight" className="text-xs overflow-auto max-h-96">{JSON.stringify(preflight, null, 2)}</pre>}
     {error && <p role="alert">{error}</p>}
   </details>;

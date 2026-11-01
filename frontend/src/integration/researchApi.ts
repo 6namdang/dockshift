@@ -2,14 +2,21 @@ import { API_BASE, AgentRunResult, AgentCapabilities, Prediction, Profile, Paper
 import type { CollectiveOutput } from './CollectiveWorkflow';
 
 export interface ManagedRunResult extends AgentRunResult {
+  agents: Array<AgentRunResult['agents'][number] & {
+    llm_decision_completed?: boolean; reused_from?: string; prior_contract_errors?: string[];
+  }>;
   outputs?: ResearchOutputs;
   workflow?: string;
   candidate_screening_status?: string;
   review_provider?: string | null;
+  reasoning_usage?: { attempted_requests: number; request_limit: number; reserved_cost_usd: string;
+    cost_limit_usd: string; per_agent_requests: Record<string,number>; model: string };
 }
 export interface ManagedCapabilities extends AgentCapabilities {
   admet_enabled?: boolean;
-  llm?: { available: boolean; model: string | null; detail: string | null };
+  demo_enabled?: boolean;
+  demo_started?: boolean;
+  llm?: { provider?: string; available: boolean; model: string | null; detail: string | null };
 }
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, init);
@@ -35,6 +42,8 @@ export interface ScientificArtifact {
 }
 export interface ResearchOutputs {
   collective?: CollectiveOutput;
+  demonstration_continuation?: { source_run: string; reused_workers: string[];
+    prior_usage_records_missing: number };
   target?: Record<string, unknown>;
   screening?: { qsar: { predictions: Prediction[] }; profiles: { profiles: Profile[] };
     chemical_audit: Record<string, unknown>; model: unknown; versions: Record<string, string> };
@@ -68,3 +77,8 @@ export async function downloadResearchArtifact(id: string, name: string, token: 
   if (!response.ok) throw new Error(`Artifact retrieval failed: HTTP ${response.status}`);
   return response.blob();
 }
+
+export const startDemonstration = (token: string) =>
+  call<{ run_id: string; status: string }>('/api/v1/agents/demonstration', {
+    method: 'POST', headers: { Authorization: `Bearer ${token}` },
+  });

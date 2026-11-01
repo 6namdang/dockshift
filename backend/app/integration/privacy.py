@@ -13,6 +13,8 @@ SENSITIVE_KEYS = {
     "refresh_token",
     "secret",
     "bearer_token",
+    "anthropic_api_key",
+    "x-api-key",
 }
 
 
@@ -20,6 +22,7 @@ class Redactor:
     def __init__(self, settings):
         self.secrets = []
         for name in (
+            "anthropic_api_key",
             "nebius_llm_api_key",
             "scientific_models_api_key",
             "openai_api_key",
