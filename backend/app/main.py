@@ -67,7 +67,9 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(api)
 
-    frontend = BACKEND_DIR.parent / "frontend"
+    # The built React app. Run `npm run build` in frontend/ to produce it; during
+    # development `npm run dev` serves it on :3000 and proxies /api here instead.
+    frontend = BACKEND_DIR.parent / "frontend" / "dist"
     if (frontend / "index.html").is_file():
         app.mount("/ui", StaticFiles(directory=frontend, html=True), name="frontend")
 

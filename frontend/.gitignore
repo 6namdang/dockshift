@@ -1,0 +1,10 @@
+node_modules/
+build/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# dist/ is committed on purpose: the backend serves it at /ui/ and a clone
+# should work without a build step.

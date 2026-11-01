@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  --color-cosmic-bg: #0B1118;
+  --color-panel-bg: #18232D;
+  --color-panel-border: #202F3C;
+  --color-panel-hover: #1E2D3A;
+  --color-brand-amber: #E9A76A;
+  --color-brand-mint: #59C9C0;
+  --color-accent-cyan: #59C9C0;
+  --color-accent-blue: #3E8299;
+  --color-accent-violet: #A79BEE;
+  --color-accent-gold: #E9A76A;
+  --color-text-primary: #E9F0F3;
+  --color-text-secondary: #90A4AF;
+  --color-text-muted: #627783;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0B1118;
+  color: #E9F0F3;
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom scrollbar for scientific panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B1118;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #202F3C;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2C3E4E;
+}
