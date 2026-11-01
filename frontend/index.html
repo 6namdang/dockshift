@@ -273,6 +273,22 @@
   .scalebar .ramp { width: 108px; height: 8px; border-radius: 999px;
     background: linear-gradient(to right, var(--surface-1), var(--series-pred)); border: 1px solid var(--border); }
 
+  /* ---------- structural ---------- */
+  .engine { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .engine th, .engine td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--grid); }
+  .engine th { font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+               color: var(--text-secondary); font-weight: 600; }
+  .engine code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .payload {
+    width: 100%; min-height: 150px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11.5px; line-height: 1.45; padding: 11px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--page); color: var(--text-primary);
+    resize: vertical; white-space: pre;
+  }
+  .gates { margin: 0; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+  .gates li { margin: 5px 0; }
+  .gates b { color: var(--text-primary); font-weight: 600; }
+
   .caveat { font-size: 12px; color: var(--text-muted); margin-top: 24px; border-top: 1px solid var(--border); padding-top: 14px; }
   .caveat a { color: var(--text-secondary); }
   .hidden { display: none !important; }
@@ -298,6 +314,7 @@
     <button id="tab-screen" role="tab" aria-selected="true" aria-controls="view-screen">Screen</button>
     <button id="tab-lit" role="tab" aria-selected="false" aria-controls="view-lit">Literature</button>
     <button id="tab-libr" role="tab" aria-selected="false" aria-controls="view-libr">Library</button>
+    <button id="tab-struct" role="tab" aria-selected="false" aria-controls="view-struct">Structural</button>
   </div>
 
   <div id="view-screen" role="tabpanel" aria-labelledby="tab-screen">
@@ -335,6 +352,77 @@
   </section>
 
     <p class="caveat" id="caveat"></p>
+  </div>
+
+  <div id="view-struct" class="hidden" role="tabpanel" aria-labelledby="tab-struct">
+    <section class="step">
+      <div class="step-head"><span class="step-n">&#9881;</span><h2>Structural engines</h2></div>
+      <p class="note">Which external tools are installed and reachable. Structural REST is
+        disabled by default; enable it with <code>STRUCTURAL_REST_ENABLED=true</code> and a
+        <code>STRUCTURAL_API_TOKEN</code>.</p>
+      <div class="body">
+        <div class="litform">
+          <input type="password" id="stok" aria-label="Structural API token"
+                 placeholder="STRUCTURAL_API_TOKEN" autocomplete="off">
+          <button class="primary" id="stgo">Check engines</button>
+          <span class="msg" id="ststatus"></span>
+        </div>
+        <p class="cap" style="font-size:11px;color:var(--text-muted);margin-top:7px">
+          Held in this browser tab only, for as long as it is open. Never written to disk
+          and never sent anywhere but this server.</p>
+        <div id="stresults" style="margin-top:14px"></div>
+      </div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><span class="step-n">&#8631;</span><h2>Candidates for docking</h2></div>
+      <p class="note">The shortlist from whichever tab you last ran, in the shape the
+        structural workflow expects. At most six.</p>
+      <div class="body" id="stcands"><p class="msg">Run a shortlist on another tab first.</p></div>
+    </section>
+
+    <section class="step">
+      <div class="step-head"><span class="step-n">&#9888;</span><h2>Before docking can run</h2></div>
+      <p class="note">The workflow is deliberately gated. These are not bypassable from here.</p>
+      <div class="body">
+        <ul class="gates">
+          <li><b>A human receptor.</b> <b>PDB 9Q14</b> — human telomerase catalytic core
+            with BIBR1532 and a DNA primer bound, 3.0&nbsp;A cryo-EM. Fetch it from RCSB;
+            AlphaFold&nbsp;3 is not required to dock. Note 9Q14 models 1,498 of 2,054
+            deposited residues, which is fine for docking but not for MD until the missing
+            loops are rebuilt.</li>
+          <li><b>tcTERT is a control, not a receptor.</b> The FVYL thumb pocket comes from
+            <b>5CQG</b>, a <i>Tribolium castaneum</i> (beetle) protein. In humans BIBR1532
+            binds the RT domain between fingers and palm. Use 5CQG as a negative control,
+            never as the basis for a human claim.</li>
+          <li><b>A literature checkpoint</b> completed after QSAR and before structural work.
+            A fixed shortlist does not satisfy it.</li>
+          <li><b>Scientist approval</b> referencing an immutable pocket plan and its SHA-256.
+            The workflow re-verifies that hash against the current structures.</li>
+          <li><b>The engines above.</b> Anything unavailable stops the stage that needs it.</li>
+        </ul>
+        <p class="msg" style="margin-top:12px">Runs are driven through the API or the MCP
+          tools, not from this page: they are long-running and write artifacts to the
+          server. Use <code>run_structural_workflow</code>, or
+          <code>POST /api/v1/structural/workflow</code>.</p>
+
+        <h3 style="font-size:13px;font-weight:600;margin:20px 0 2px">Validating the setup</h3>
+        <p class="cap" style="font-size:12px;color:var(--text-muted);margin-bottom:8px">
+          Two cheap checks that catch a wrong setup before any screening result means
+          anything.</p>
+        <ul class="gates">
+          <li><b>Redock BIBR1532 into 9Q14</b> and require under 2.0&nbsp;A RMSD to the
+            deposited pose. Published work reaches 0.57-0.67&nbsp;A, so a worse result means
+            the receptor preparation is wrong, not the structure. BIBR1532 carries a
+            carboxylic acid and is anionic at pH&nbsp;7.4 — modelled neutral, the pose fails
+            for electrostatic reasons.</li>
+          <li><b>Compare the docked pose against the published alanine scan.</b> The
+            human cryo-EM paper reports per-residue mutations with their IC50 shifts. If the
+            pose does not contact the residues whose mutation moves the IC50, the setup is
+            wrong in a way a good RMSD cannot reveal. No engine, no GPU.</li>
+        </ul>
+      </div>
+    </section>
   </div>
 
   <div id="view-libr" class="hidden" role="tabpanel" aria-labelledby="tab-libr">
@@ -498,6 +586,7 @@ async function run() {
     $("step3").classList.toggle("idle", rows.length === 0);
     $("step3body").innerHTML = "";
     renderResults($("step3body"), rows, body);
+    rememberShortlist("Screen", rows);
   } catch (err) {
     $("runStatus").textContent = "";
     renderRunError(err);
@@ -762,7 +851,14 @@ function details(data) {
       ? badge("good", "In domain", `max Tanimoto ${fmt(p.max_tanimoto)} >= ${threshold}`)
       : badge("warn", "Outside domain", `max Tanimoto ${fmt(p.max_tanimoto)} < ${threshold} — extrapolation`));
     if (p.in_training_set) badges.appendChild(badge("info", "In training set", "The model was fitted on this compound, so its prediction is optimistic."));
-    if (p.measured_pic50 != null) badges.appendChild(badge("info", `Measured ${fmt(p.measured_pic50)}`, "Experimental pIC50 from ChEMBL"));
+    if (p.measured_pic50 != null) {
+      const n = p.measured_count ? ` from ${p.measured_count} ChEMBL record${p.measured_count > 1 ? "s" : ""}` : "";
+      const approx = p.measured_match && p.measured_match !== "exact";
+      badges.appendChild(badge(
+        approx ? "warn" : "info",
+        `Measured ${fmt(p.measured_pic50)}${approx ? " ~" : ""}`,
+        `Experimental pIC50${n}.` + (approx ? ` Caution: ${p.measured_match}.` : "")));
+    }
     const pr = r.profile || {};
     if (pr.lipinski_violations != null) {
       badges.appendChild(pr.lipinski_pass
@@ -814,6 +910,7 @@ function tableView(data) {
     ["Pred. pIC50", (r) => fmt(r.prediction.predicted_pic50), 1],
     ["Pred. IC50 (nM)", (r) => nf.format(Math.round(r.prediction.predicted_ic50_nm)), 1],
     ["Measured pIC50", (r) => fmt(r.prediction.measured_pic50), 1],
+    ["Measured match", (r) => r.prediction.measured_match ?? "—"],
     ["Max Tanimoto", (r) => fmt(r.prediction.max_tanimoto), 1],
     ["Domain", (r) => r.prediction.domain ?? "—"],
     ["QED", (r) => fmt(r.profile?.qed, 3), 1],
@@ -880,6 +977,7 @@ function renderMolecules(body) {
     box.appendChild(el("p", "msg", "No small molecules survived checking. Try another query."));
   } else {
     renderResults(box, litRows, body);
+    rememberShortlist("Literature", litRows);
   }
 
   if (body.dropped?.length) {
@@ -932,6 +1030,7 @@ async function screenLibrary() {
       `top ${body.shortlist_size} shortlisted`;
     $("libresults").innerHTML = "";
     renderResults($("libresults"), libRows, body);
+    rememberShortlist("Library", libRows);
   } catch (err) {
     $("libstatus").className = "msg err";
     $("libstatus").textContent = err.message;
@@ -940,14 +1039,152 @@ async function screenLibrary() {
   }
 }
 
+/* ---------------- structural tab ---------------- */
+let lastShortlist = null;   // {source, rows} from whichever tab last produced results
+
+function rememberShortlist(source, data) {
+  lastShortlist = { source, rows: data };
+  if (!$("view-struct").classList.contains("hidden")) renderCandidates4Structural();
+}
+
+async function checkEngines() {
+  const token = $("stok").value.trim();
+  $("stgo").disabled = true;
+  $("ststatus").className = "msg";
+  $("ststatus").innerHTML = '<span class="spinner"></span>Checking…';
+  try {
+    const res = await fetch(`${API}/api/v1/structural/capabilities`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 503) throw new Error(
+      "Structural REST is disabled. Set STRUCTURAL_REST_ENABLED=true and STRUCTURAL_API_TOKEN, then restart.");
+    if (res.status === 401) throw new Error("A token is required. Paste STRUCTURAL_API_TOKEN above.");
+    if (res.status === 403) throw new Error("That token was rejected.");
+    if (!res.ok) throw new Error(body.detail?.message || body.detail || `HTTP ${res.status}`);
+    try { sessionStorage.setItem("dockshift-structural-token", token); } catch {}
+    renderEngines(body);
+  } catch (err) {
+    $("ststatus").className = "msg err";
+    $("ststatus").textContent = err.message;
+    $("stresults").innerHTML = "";
+  } finally {
+    $("stgo").disabled = false;
+  }
+}
+
+function renderEngines(body) {
+  const ready = body.tools.filter((t) => t.available).length;
+  $("ststatus").textContent = `${ready} of ${body.tools.length} engines available · status ${body.status}`;
+  const box = $("stresults");
+  box.innerHTML = "";
+
+  const t = el("table", "engine");
+  t.innerHTML = "<thead><tr><th>Engine</th><th>Status</th><th>Configured as</th><th>Version</th></tr></thead>";
+  const tb = el("tbody");
+  for (const tool of body.tools) {
+    const tr = el("tr");
+    tr.appendChild(el("td", null, tool.tool));
+    const status = el("td");
+    status.appendChild(tool.available
+      ? badge("good", "available")
+      : badge("warn", "not found", tool.reason || ""));
+    tr.appendChild(status);
+    const conf = el("td");
+    const code = el("code", null, tool.resolved_executable || tool.configured_value || "—");
+    conf.appendChild(code);
+    tr.appendChild(conf);
+    tr.appendChild(el("td", null, tool.version || "—"));
+    tb.appendChild(tr);
+  }
+  t.appendChild(tb);
+  box.appendChild(t);
+
+  for (const note of body.notes || []) {
+    const n = el("p", "msg");
+    n.style.marginTop = "10px";
+    n.textContent = note;
+    box.appendChild(n);
+  }
+  const where = el("p", "msg");
+  where.style.marginTop = "10px";
+  where.textContent = `Artifact root: ${body.artifact_root} · backend: ${body.execution_backend}`;
+  box.appendChild(where);
+}
+
+function renderCandidates4Structural() {
+  const box = $("stcands");
+  box.innerHTML = "";
+  if (!lastShortlist || !lastShortlist.rows.length) {
+    box.appendChild(el("p", "msg", "Run a shortlist on another tab first."));
+    return;
+  }
+  const picked = lastShortlist.rows
+    .filter((r) => r.selected && r.prediction?.smiles)
+    .slice(0, 6);
+  if (!picked.length) {
+    box.appendChild(el("p", "msg", "Nothing in the last shortlist carried a structure."));
+    return;
+  }
+
+  const summary = el("p", "msg");
+  summary.textContent = `${picked.length} from the ${lastShortlist.source} tab:  ` +
+    picked.map((r) => r.name).join(", ");
+  box.appendChild(summary);
+
+  // The documented handoff: canonical SMILES plus the QSAR result kept as metadata.
+  const payload = {
+    candidates: picked.map((r) => ({
+      candidate_id: r.name.replace(/[^A-Za-z0-9_.-]+/g, "_"),
+      smiles: r.prediction.smiles,
+      qsar_metadata: {
+        predicted_pic50: r.prediction.predicted_pic50,
+        predicted_ic50_nm: r.prediction.predicted_ic50_nm,
+        measured_pic50: r.prediction.measured_pic50,
+        max_tanimoto: r.prediction.max_tanimoto,
+        domain: r.prediction.domain,
+        in_training_set: r.prediction.in_training_set,
+        qed: r.profile?.qed ?? null,
+        lipinski_violations: r.profile?.lipinski_violations ?? null,
+        veber_pass: r.profile?.veber_pass ?? null,
+      },
+    })),
+  };
+  const area = el("textarea", "payload");
+  area.readOnly = true;
+  area.value = JSON.stringify(payload, null, 2);
+  area.setAttribute("aria-label", "Candidate payload for the structural workflow");
+  box.appendChild(area);
+
+  const row = el("div", "runrow");
+  const copy = el("button", null, "Copy");
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(area.value);
+      copy.textContent = "Copied";
+      setTimeout(() => (copy.textContent = "Copy"), 1200);
+    } catch {
+      area.select();
+      copy.textContent = "Select and copy";
+    }
+  });
+  row.appendChild(copy);
+  const hint = el("span", "msg", "Paste into run_structural_workflow, with the structures, "
+    + "the literature checkpoint and the pocket approval.");
+  row.appendChild(hint);
+  box.appendChild(row);
+}
+
 /* ---------------- tabs ---------------- */
 const TABS = [
   ["screen", "view-screen"],
   ["lit", "view-lit"],
   ["libr", "view-libr"],
+  ["struct", "view-struct"],
 ];
 
 function selectTab(name) {
+  if (name === "struct") renderCandidates4Structural();
   for (const [tab, view] of TABS) {
     const on = tab === name;
     $(`tab-${tab}`).setAttribute("aria-selected", String(on));
@@ -959,6 +1196,13 @@ function selectTab(name) {
 $("tab-screen").addEventListener("click", () => selectTab("screen"));
 $("tab-lit").addEventListener("click", () => selectTab("lit"));
 $("tab-libr").addEventListener("click", () => selectTab("libr"));
+$("tab-struct").addEventListener("click", () => selectTab("struct"));
+$("stgo").addEventListener("click", checkEngines);
+$("stok").addEventListener("keydown", (e) => { if (e.key === "Enter") checkEngines(); });
+try {
+  const saved = sessionStorage.getItem("dockshift-structural-token");
+  if (saved) $("stok").value = saved;
+} catch {}
 $("libgo").addEventListener("click", screenLibrary);
 $("libq").addEventListener("keydown", (e) => { if (e.key === "Enter") screenLibrary(); });
 $("litgo").addEventListener("click", findMolecules);

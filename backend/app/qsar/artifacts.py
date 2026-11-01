@@ -15,7 +15,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from app.qsar.chem import fingerprint, standardise
+from app.qsar.chem import fingerprint, flat_smiles, standardise
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
@@ -27,6 +27,7 @@ class DatasetEntry:
     pic50: float
     n_measurements: int
     in_training_set: bool
+    flat_smiles: str = ""
 
 
 @dataclass
@@ -41,6 +42,22 @@ class Artifacts:
     @cached_property
     def by_smiles(self) -> dict[str, DatasetEntry]:
         return {entry.smiles: entry for entry in self.entries}
+
+    @cached_property
+    def by_flat_smiles(self) -> dict[str, list[DatasetEntry]]:
+        """Entries keyed by structure with stereochemistry removed, best-supported first.
+
+        The curated set holds stereoisomers as separate rows — BIBR1532 appears as both
+        E and Z, with pIC50 5.30 (n=1) and 6.55 (n=15) — so a flat key can map to several
+        entries and the caller has to say which it used.
+        """
+        groups: dict[str, list[DatasetEntry]] = {}
+        for entry in self.entries:
+            if entry.flat_smiles:
+                groups.setdefault(entry.flat_smiles, []).append(entry)
+        for group in groups.values():
+            group.sort(key=lambda e: e.n_measurements, reverse=True)
+        return groups
 
     @property
     def domain_threshold(self) -> float:
@@ -75,8 +92,12 @@ def _build() -> Artifacts:
     train_indices = set(json.loads((DATA_DIR / "train_indices.json").read_text()))
 
     entries: list[DatasetEntry] = []
+    molecules: dict[int, Any] = {}
     with (DATA_DIR / "htert_curated_dataset.csv").open() as handle:
         for i, row in enumerate(csv.DictReader(handle)):
+            mol = standardise(row["std_smiles"])
+            if mol is not None:
+                molecules[i] = mol
             entries.append(
                 DatasetEntry(
                     index=i,
@@ -84,6 +105,7 @@ def _build() -> Artifacts:
                     pic50=float(row["pIC50"]),
                     n_measurements=int(row["n_measurements"]),
                     in_training_set=i in train_indices,
+                    flat_smiles=flat_smiles(mol) if mol is not None else "",
                 )
             )
 
@@ -105,7 +127,7 @@ def _build() -> Artifacts:
     for entry in entries:
         if not entry.in_training_set:
             continue
-        mol = standardise(entry.smiles)
+        mol = molecules.get(entry.index)
         if mol is None:
             continue
         train_entries.append(entry)

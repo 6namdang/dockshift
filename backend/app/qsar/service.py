@@ -40,6 +40,34 @@ MODEL_NOTE = (
 )
 
 
+def _lookup_measured(
+    artifacts: Artifacts, mol: Chem.Mol, smiles: str | None
+) -> tuple[DatasetEntry | None, str | None]:
+    """Find this structure's measured value, falling back to a stereochemistry-blind match.
+
+    Morgan fingerprints ignore stereochemistry, so a compound can score Tanimoto 1.00
+    against the training set while failing an exact SMILES match — the measured value
+    would then silently disappear. The curated set stores stereoisomers separately
+    (BIBR1532 is present as both E and Z), so when the fallback is ambiguous the
+    best-supported entry is used and the caller is told.
+    """
+    exact = artifacts.by_smiles.get(smiles or "")
+    if exact is not None:
+        return exact, "exact"
+
+    group = artifacts.by_flat_smiles.get(chem.flat_smiles(mol), [])
+    if not group:
+        return None, None
+    best = group[0]  # sorted by measurement count
+    if len(group) == 1:
+        return best, "matched ignoring stereochemistry"
+    return best, (
+        f"matched ignoring stereochemistry; the dataset holds {len(group)} isomers "
+        f"(pIC50 {', '.join(f'{e.pic50:.2f}' for e in group)}), and the one with "
+        f"{best.n_measurements} measurements was used"
+    )
+
+
 class QsarService:
     def __init__(self, client: httpx.AsyncClient, settings: Settings | None = None) -> None:
         self.client = client
@@ -149,7 +177,7 @@ class QsarService:
         max_tanimoto = max(similarities) if similarities else 0.0
         threshold = artifacts.domain_threshold
 
-        known: DatasetEntry | None = artifacts.by_smiles.get(ref.smiles or "")
+        known, match = _lookup_measured(artifacts, mol, ref.smiles)
         return ActivityPrediction(
             **ref.model_dump(),
             predicted_pic50=round(pic50, 2),
@@ -158,6 +186,7 @@ class QsarService:
             domain=Domain.IN if max_tanimoto >= threshold else Domain.OUT,
             measured_pic50=round(known.pic50, 2) if known else None,
             measured_count=known.n_measurements if known else None,
+            measured_match=match,
             in_training_set=bool(known and known.in_training_set),
         )
 

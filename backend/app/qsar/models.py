@@ -55,6 +55,11 @@ class ActivityPrediction(CompoundRef):
     measured_count: int | None = Field(
         None, description="How many ChEMBL measurements the experimental value aggregates."
     )
+    measured_match: str | None = Field(
+        None,
+        description="How the measured value was matched: 'exact', or a note when "
+        "stereochemistry had to be ignored.",
+    )
     in_training_set: bool = Field(
         False,
         description="True if this structure was used to fit the model, making its prediction "

@@ -50,6 +50,16 @@ class Settings(BaseSettings):
     fulltext_max_docs: int = 3
     fulltext_max_chars: int = 20_000
 
+    # --- Nebius Scientific AI (remote structural engines over MCP) ------------
+    # A streamable-HTTP MCP server carrying DiffDock, AlphaFold 3, GROMACS and friends,
+    # so those engines need no local install. Without a key they report as unavailable.
+    scientific_models_mcp_url: str = "https://89.169.99.188/mcp"
+    scientific_models_api_key: str | None = Field(
+        None,
+        validation_alias=AliasChoices("scientific_models_api_key", "nebius_api_key"),
+    )
+    nebius_timeout_seconds: float = 180.0
+
     # --- Structural discovery -------------------------------------------------
     # REST execution and HTTP MCP are independently opt-in. MCP stdio remains local.
     structural_rest_enabled: bool = False

@@ -8,6 +8,7 @@ from fastapi import Header, HTTPException, Request, status
 
 from app.agent import PipelineService
 from app.literature import LiteratureSearchService
+from app.nebius import NebiusService
 from app.qsar import QsarService
 from app.structural import StructuralService
 
@@ -72,3 +73,7 @@ def authorize_structural_rest(
                 "message": "The structural REST Bearer token is invalid.",
             },
         )
+
+
+def get_nebius_service(request: Request) -> NebiusService:
+    return request.app.state.nebius_service

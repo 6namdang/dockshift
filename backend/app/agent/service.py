@@ -86,8 +86,10 @@ TARGETS: dict[str, Target] = {
         candidates=[
             CandidateSpec(
                 name="BIBR1532",
-                note="Synthetic telomerase inhibitor binding the FVYL pocket of the hTERT "
-                "thumb domain.",
+                note="Selective telomerase inhibitor. Human cryo-EM (PDB 9Q14) places it in "
+                "the reverse-transcriptase domain between fingers and palm, near the "
+                "template-DNA duplex; the FVYL thumb pocket is from tcTERT (5CQG), a beetle "
+                "protein, and is not the human site.",
             ),
             CandidateSpec(
                 name="quercetin",
@@ -109,7 +111,9 @@ TARGETS: dict[str, Target] = {
             ),
             CandidateSpec(
                 name="raltitrexed",
-                note="Antifolate thymidylate synthase inhibitor used as an anticancer agent.",
+                note="Antifolate thymidylate synthase inhibitor. Its reported hTERT activity "
+                "comes from TRAP, a PCR-based assay in which anionic nucleotide mimics are a "
+                "known false positive, so treat it as unconfirmed.",
             ),
         ],
     )

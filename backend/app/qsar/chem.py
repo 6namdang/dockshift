@@ -123,3 +123,15 @@ def to_svg(mol: Chem.Mol, size: int = 200) -> str:
     rdMolDraw2D.PrepareAndDrawMolecule(drawer, mol)
     drawer.FinishDrawing()
     return drawer.GetDrawingText()
+
+
+def flat_smiles(mol: Chem.Mol) -> str:
+    """Canonical SMILES with stereochemistry removed.
+
+    Morgan fingerprints ignore double-bond and centre stereochemistry, so a structure can
+    score Tanimoto 1.00 against a dataset entry it does not match exactly. This gives a
+    second key for looking a compound up when the exact match fails.
+    """
+    copy = Chem.Mol(mol)
+    Chem.RemoveStereochemistry(copy)
+    return Chem.MolToSmiles(copy, canonical=True)
