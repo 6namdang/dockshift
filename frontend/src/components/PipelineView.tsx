@@ -796,11 +796,15 @@ export const PipelineView: React.FC = () => {
 
           {(active === 'candidates' || active === 'selection' || active === 'iterate') &&
             candidates.length > 0 && (
-              <CandidateCards
-                rows={candidates}
-                onToggle={toggle}
-                selectable={active === 'selection' || active === 'iterate'}
-              />
+              <>
+                <RankedPlot rows={candidates} />
+                <CandidateCards
+                  rows={candidates}
+                  onToggle={toggle}
+                  selectable={active === 'selection' || active === 'iterate'}
+                />
+                <ValueTable rows={candidates} />
+              </>
             )}
 
           {active === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
@@ -954,19 +958,286 @@ const SitePanel: React.FC<{ sites: SiteDto[] }> = ({ sites }) => (
   </section>
 );
 
+/* ---------------------------------------------------------- ranked plot */
+
+/**
+ * Two series on one axis: the model's estimate and, where it exists, the
+ * experimental value. Colours are the validated dark-surface categorical pair
+ * (OKLCH L inside 0.48-0.67, CVD dE 26.8 protan) -- the interface mint and amber
+ * sit at L 0.77 and fail the band against this surface, so the plot uses its own.
+ */
+const SERIES_PRED = '#3987e5';
+const SERIES_MEAS = '#d95926';
+
+const AXIS = { min: 4, max: 8.5, ticks: [4, 5, 6, 7, 8] };
+const axisPos = (v: number) =>
+  ((Math.min(Math.max(v, AXIS.min), AXIS.max) - AXIS.min) / (AXIS.max - AXIS.min)) * 100;
+
+const GRID = '26px minmax(96px,150px) 1fr 54px 78px';
+
+interface TipState {
+  x: number;
+  y: number;
+  title: string;
+  lines: string[];
+}
+
+const RankedPlot: React.FC<{ rows: CandidateRow[] }> = ({ rows }) => {
+  const [tip, setTip] = useState<TipState | null>(null);
+  const scored = rows.filter((r) => r.predictedPic50 != null);
+  if (!scored.length) return null;
+  const anyMeasured = scored.some((r) => r.measuredPic50 != null);
+
+  const show = (e: React.MouseEvent, title: string, lines: string[]) => {
+    const t = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setTip({ x: t.left + t.width / 2, y: t.top, title, lines });
+  };
+
+  return (
+    <section>
+      <SectionTitle icon={Activity} title="Predicted potency, ranked" />
+
+      {/* legend: identity is never colour alone, so each swatch carries its label */}
+      <div className="flex items-center gap-5 flex-wrap text-[12px] text-[#90A4AF] mb-3">
+        <span className="flex items-center gap-2">
+          <span
+            className="w-[10px] h-[10px] rounded-full ring-2 ring-[#131E27]"
+            style={{ background: SERIES_PRED }}
+          />
+          Predicted
+        </span>
+        {anyMeasured && (
+          <span className="flex items-center gap-2">
+            <span
+              className="w-[10px] h-[10px] rounded-full ring-2 ring-[#131E27]"
+              style={{ background: SERIES_MEAS }}
+            />
+            Measured (ChEMBL)
+          </span>
+        )}
+        <span className="text-[#4C5E6B]">Numbered rows are the shortlist</span>
+      </div>
+
+      <div className="rounded-lg border border-[#202F3C] bg-[#131E27] px-4 py-3">
+        {scored.map((r) => (
+          <div
+            key={r.name}
+            className="grid items-center gap-2.5 py-[1px]"
+            style={{ gridTemplateColumns: GRID }}
+          >
+            <div className="text-right">
+              {r.selected ? (
+                <span className="inline-grid place-items-center w-5 h-5 rounded-full bg-[#E9F0F3] text-[#0B1118] text-[11px] font-semibold tabular-nums">
+                  {r.rank}
+                </span>
+              ) : (
+                <span className="text-[11px] text-[#4C5E6B] tabular-nums">{r.rank}</span>
+              )}
+            </div>
+
+            <div
+              className={`text-[12px] truncate ${
+                r.selected ? 'text-[#E9F0F3]' : 'text-[#7E939F]'
+              }`}
+              title={r.smiles ?? r.name}
+            >
+              {r.name}
+            </div>
+
+            <div className="relative h-[26px]">
+              {AXIS.ticks.map((t) => (
+                <span
+                  key={t}
+                  className="absolute top-0 bottom-0 w-px bg-[#1F2E3A]"
+                  style={{ left: `${axisPos(t)}%` }}
+                />
+              ))}
+
+              {r.measuredPic50 != null && (
+                <button
+                  type="button"
+                  aria-label={`${r.name}: measured pIC50 ${fmt(r.measuredPic50)}`}
+                  className="absolute top-1/2 -mt-[13px] -ml-[13px] w-[26px] h-[26px] grid place-items-center rounded-full"
+                  style={{ left: `${axisPos(r.measuredPic50)}%` }}
+                  onMouseEnter={(e) =>
+                    show(e, r.name, [
+                      `Measured pIC50 ${fmt(r.measuredPic50)}`,
+                      'Experimental value from ChEMBL',
+                    ])
+                  }
+                  onMouseLeave={() => setTip(null)}
+                  onFocus={(e) =>
+                    show(e as unknown as React.MouseEvent, r.name, [
+                      `Measured pIC50 ${fmt(r.measuredPic50)}`,
+                    ])
+                  }
+                  onBlur={() => setTip(null)}
+                >
+                  <span
+                    className="w-[11px] h-[11px] rounded-full ring-2 ring-[#131E27]"
+                    style={{ background: SERIES_MEAS }}
+                  />
+                </button>
+              )}
+
+              <button
+                type="button"
+                aria-label={`${r.name}: predicted pIC50 ${fmt(r.predictedPic50)}`}
+                className="absolute top-1/2 -mt-[13px] -ml-[13px] w-[26px] h-[26px] grid place-items-center rounded-full"
+                style={{ left: `${axisPos(r.predictedPic50 as number)}%` }}
+                onMouseEnter={(e) =>
+                  show(e, r.name, [
+                    `Predicted pIC50 ${fmt(r.predictedPic50)}` +
+                      (r.predictedIc50Nm
+                        ? `  ·  ${nf.format(Math.round(r.predictedIc50Nm))} nM`
+                        : ''),
+                    `Nearest training compound: Tanimoto ${fmt(r.maxTanimoto)}`,
+                    r.domain === 'in'
+                      ? 'Inside the applicability domain'
+                      : 'Outside the applicability domain — extrapolation',
+                    ...(r.inTrainingSet
+                      ? ['In the training set, so this estimate is optimistic']
+                      : []),
+                  ])
+                }
+                onMouseLeave={() => setTip(null)}
+                onBlur={() => setTip(null)}
+              >
+                <span
+                  className="w-[11px] h-[11px] rounded-full ring-2 ring-[#131E27]"
+                  style={{ background: SERIES_PRED }}
+                />
+              </button>
+            </div>
+
+            <div
+              className={`text-[12px] text-right tabular-nums ${
+                r.selected ? 'text-[#E9F0F3]' : 'text-[#7E939F]'
+              }`}
+            >
+              {fmt(r.predictedPic50)}
+            </div>
+            <div className="text-[12px] text-right tabular-nums text-[#627783]">
+              {r.predictedIc50Nm ? `${nf.format(Math.round(r.predictedIc50Nm))} nM` : '—'}
+            </div>
+          </div>
+        ))}
+
+        {/* axis */}
+        <div className="grid gap-2.5 mt-1.5" style={{ gridTemplateColumns: GRID }}>
+          <div />
+          <div />
+          <div>
+            <div className="relative h-[18px] border-t border-[#2A3A48]">
+              {AXIS.ticks.map((t) => (
+                <span
+                  key={t}
+                  className="absolute top-[3px] -translate-x-1/2 text-[11px] text-[#627783] tabular-nums"
+                  style={{ left: `${axisPos(t)}%` }}
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+            <div className="text-[11px] text-[#4C5E6B] text-center mt-0.5">
+              predicted pIC50 (higher = more potent)
+            </div>
+          </div>
+          <div />
+          <div />
+        </div>
+      </div>
+
+      {tip && (
+        <div
+          className="fixed z-50 pointer-events-none rounded-lg border border-[#2A3A48] bg-[#18232D] px-3 py-2 shadow-xl max-w-[280px]"
+          style={{ left: tip.x, top: tip.y - 8, transform: 'translate(-50%,-100%)' }}
+          role="status"
+        >
+          <div className="text-[12px] font-semibold text-[#E9F0F3]">{tip.title}</div>
+          {tip.lines.map((l) => (
+            <div key={l} className="text-[11px] text-[#90A4AF] leading-snug mt-0.5">
+              {l}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
+/** Every value, in text -- the table view the plot is read against. */
+const ValueTable: React.FC<{ rows: CandidateRow[] }> = ({ rows }) => (
+  <section>
+    <SectionTitle icon={Layers} title="Every value, in text" />
+    <div className="rounded-lg border border-[#202F3C] overflow-x-auto">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="bg-[#131E27] text-[10px] uppercase tracking-[0.08em] text-[#627783]">
+            {['#', 'Compound', 'Short', 'Pred pIC50', 'Pred IC50 nM', 'Measured',
+              'Tanimoto', 'Domain', 'QED', 'Lipinski', 'Veber'].map((h, i) => (
+              <th
+                key={h}
+                className={`font-semibold px-3 py-2.5 ${i >= 3 ? 'text-right' : 'text-left'}`}
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows
+            .filter((r) => r.predictedPic50 != null)
+            .map((r) => (
+              <tr key={r.name} className="border-t border-[#1B2833]">
+                <td className="px-3 py-2 text-[#627783] tabular-nums">{r.rank}</td>
+                <td className="px-3 py-2 text-[#E9F0F3]">{r.name}</td>
+                <td className="px-3 py-2 text-[#7E939F]">{r.selected ? 'yes' : 'no'}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#E9F0F3]">
+                  {fmt(r.predictedPic50)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#7E939F]">
+                  {r.predictedIc50Nm ? nf.format(Math.round(r.predictedIc50Nm)) : '—'}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#7E939F]">
+                  {fmt(r.measuredPic50)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#7E939F]">
+                  {fmt(r.maxTanimoto)}
+                </td>
+                <td className="px-3 py-2 text-right text-[#7E939F]">{r.domain ?? '—'}</td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#7E939F]">
+                  {fmt(r.qed, 3)}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums text-[#7E939F]">
+                  {r.lipinskiViolations ?? '—'}
+                </td>
+                <td className="px-3 py-2 text-right text-[#7E939F]">
+                  {r.veberPass == null ? '—' : r.veberPass ? 'pass' : 'fail'}
+                </td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+);
+
 const Meter: React.FC<{
   label: string;
   value: number | null | undefined;
   max?: number;
   good: boolean;
   hint?: string;
-}> = ({ label, value, max = 1, good, hint }) => (
+  /** Draw a tick at this value, e.g. the applicability-domain threshold. */
+  mark?: number;
+}> = ({ label, value, max = 1, good, hint, mark }) => (
   <div title={hint}>
     <div className="flex justify-between text-[10px] font-mono">
       <span className="text-[#7E939F]">{label}</span>
       <span className="text-[#E9F0F3] font-semibold">{fmt(value)}</span>
     </div>
-    <div className="w-full h-1.5 bg-[#0C151D] rounded-full overflow-hidden mt-1">
+    <div className="relative w-full h-1.5 bg-[#0C151D] rounded-full mt-1">
       <div
         className="h-full rounded-full transition-[width] duration-500"
         style={{
@@ -974,6 +1245,12 @@ const Meter: React.FC<{
           background: good ? '#59C9C0' : '#E9A76A',
         }}
       />
+      {mark != null && (
+        <span
+          className="absolute -top-[3px] -bottom-[3px] w-[2px] rounded-sm bg-[#90A4AF]"
+          style={{ left: `${(mark / max) * 100}%` }}
+        />
+      )}
     </div>
   </div>
 );
@@ -1125,7 +1402,8 @@ const CandidateCards: React.FC<{
                 label="Similarity to training set (Tanimoto)"
                 value={r.maxTanimoto}
                 good={(r.maxTanimoto ?? 0) >= 0.272}
-                hint="Applicability-domain threshold is 0.272."
+                mark={0.272}
+                hint="Tick marks the 0.272 applicability-domain threshold."
               />
               <Meter
                 label="Drug-likeness (QED)"
