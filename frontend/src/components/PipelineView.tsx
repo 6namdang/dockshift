@@ -954,6 +954,47 @@ const SitePanel: React.FC<{ sites: SiteDto[] }> = ({ sites }) => (
   </section>
 );
 
+const Meter: React.FC<{
+  label: string;
+  value: number | null | undefined;
+  max?: number;
+  good: boolean;
+  hint?: string;
+}> = ({ label, value, max = 1, good, hint }) => (
+  <div title={hint}>
+    <div className="flex justify-between text-[10px] font-mono">
+      <span className="text-[#7E939F]">{label}</span>
+      <span className="text-[#E9F0F3] font-semibold">{fmt(value)}</span>
+    </div>
+    <div className="w-full h-1.5 bg-[#0C151D] rounded-full overflow-hidden mt-1">
+      <div
+        className="h-full rounded-full transition-[width] duration-500"
+        style={{
+          width: `${Math.min(100, Math.max(0, ((value ?? 0) / max) * 100))}%`,
+          background: good ? '#59C9C0' : '#E9A76A',
+        }}
+      />
+    </div>
+  </div>
+);
+
+const Badge: React.FC<{ ok: boolean; children: React.ReactNode; hint?: string }> = ({
+  ok,
+  children,
+  hint,
+}) => (
+  <span
+    title={hint}
+    className={`px-2 py-[3px] rounded border text-[10px] font-mono ${
+      ok
+        ? 'bg-[#0F2724] text-[#59C9C0] border-[#2A5F5C]'
+        : 'bg-[#2A1F12] text-[#E9A76A] border-[#5C4630]'
+    }`}
+  >
+    {children}
+  </span>
+);
+
 const CandidateCards: React.FC<{
   rows: CandidateRow[];
   onToggle: (name: string) => void;
@@ -961,107 +1002,145 @@ const CandidateCards: React.FC<{
 }> = ({ rows, onToggle, selectable }) => (
   <section>
     <SectionTitle icon={Database} title={`Candidates (${rows.length})`} />
-    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
       {rows.map((r) => {
-        const out = r.domain === 'out';
+        const inDomain = r.domain === 'in';
         return (
           <article
             key={r.name}
             onClick={selectable ? () => onToggle(r.name) : undefined}
-            className={`rounded-lg border bg-[#131E27] overflow-hidden transition-colors ${
+            className={`p-5 rounded-2xl border transition space-y-4 ${
               selectable ? 'cursor-pointer' : ''
             } ${
               r.selected
-                ? 'border-[#59C9C0]/60 ring-1 ring-[#59C9C0]/25'
-                : 'border-[#202F3C] hover:border-[#2E4250]'
+                ? 'bg-[#16242E] border-[#59C9C0] shadow-lg'
+                : 'bg-[#121D26] border-[#202F3C] hover:border-[#2E4250]'
             }`}
           >
-            <div className="flex items-start gap-3 p-3.5">
+            {/* header: structure, name, headline numbers */}
+            <div className="flex items-start gap-4">
               {r.smiles ? (
                 <img
-                  src={structureSvgUrl(r.smiles, 160)}
+                  src={structureSvgUrl(r.smiles, 200)}
                   alt={`Structure of ${r.name}`}
-                  className="h-[68px] w-[68px] rounded bg-white shrink-0 object-contain"
+                  className="w-24 h-24 rounded-xl bg-white p-1 border border-[#202F3C] object-contain shrink-0"
                   loading="lazy"
                 />
               ) : (
-                <div className="h-[68px] w-[68px] rounded bg-[#0F1821] shrink-0" />
+                <div className="w-24 h-24 rounded-xl bg-[#0F1821] border border-[#202F3C] grid place-items-center text-[10px] font-mono text-[#4C5E6B] shrink-0">
+                  no structure
+                </div>
               )}
 
-              <div className="min-w-0 flex-1">
-                <div className="flex items-start gap-2">
-                  <span className="font-mono text-[10px] text-[#4C5E6B] mt-[3px]">
-                    {String(r.rank).padStart(2, '0')}
-                  </span>
-                  <h3 className="text-[13px] font-medium text-[#E9F0F3] leading-tight truncate flex-1">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-semibold text-[15px] text-[#E9F0F3] truncate">
                     {r.name}
                   </h3>
-                  {selectable && (
-                    <span
-                      className={`shrink-0 h-4 w-4 rounded grid place-items-center border ${
-                        r.selected
-                          ? 'bg-[#59C9C0] border-[#59C9C0]'
-                          : 'border-[#3A4C59]'
-                      }`}
-                    >
-                      {r.selected && <Check size={11} className="text-[#06231F]" />}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#0C151D] text-[#59C9C0] font-semibold">
+                      Rank #{r.rank}
+                    </span>
+                    {selectable && (
+                      <span
+                        className={`h-[18px] w-[18px] rounded grid place-items-center border ${
+                          r.selected
+                            ? 'bg-[#59C9C0] border-[#59C9C0]'
+                            : 'border-[#3A4C59]'
+                        }`}
+                      >
+                        {r.selected && <Check size={12} className="text-[#06231F]" />}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-[13px] font-mono text-[#E9A76A] font-semibold mt-1.5">
+                  Predicted pIC50 {fmt(r.predictedPic50)}
+                  {r.predictedIc50Nm != null && (
+                    <span className="text-[#90A4AF] font-normal">
+                      {'  ·  '}
+                      {nf.format(Math.round(r.predictedIc50Nm))} nM
                     </span>
                   )}
                 </div>
 
+                {r.measuredPic50 != null ? (
+                  <div className="text-[11px] font-mono text-[#59C9C0] mt-0.5">
+                    ChEMBL measured {fmt(r.measuredPic50)}
+                  </div>
+                ) : (
+                  <div className="text-[11px] font-mono text-[#4C5E6B] mt-0.5">
+                    No experimental value on record
+                  </div>
+                )}
+
                 {r.derivedFrom ? (
-                  <div className="text-[10px] text-[#A79BEE] mt-1">
-                    analogue of {r.derivedFrom}
+                  <div className="text-[11px] text-[#A79BEE] mt-1.5">
+                    Analogue of {r.derivedFrom}
                   </div>
                 ) : r.note ? (
-                  <p className="text-[11px] text-[#7E939F] mt-1 leading-snug line-clamp-2">
+                  <p className="text-[11px] text-[#7E939F] mt-1.5 leading-snug line-clamp-2">
                     {r.note}
                   </p>
                 ) : null}
               </div>
             </div>
 
-            <dl className="grid grid-cols-3 border-t border-[#1B2833] divide-x divide-[#1B2833]">
-              <Cell
-                label="pIC50"
-                value={fmt(r.predictedPic50)}
-                tone="#E9A76A"
-                foot="predicted"
-              />
-              <Cell
-                label="Measured"
-                value={fmt(r.measuredPic50)}
-                tone={r.measuredPic50 != null ? '#59C9C0' : '#4C5E6B'}
-                foot={r.measuredPic50 != null ? 'ChEMBL' : 'none'}
-              />
-              <Cell
-                label="IC50"
-                value={r.predictedIc50Nm ? nf.format(Math.round(r.predictedIc50Nm)) : '—'}
-                tone="#A9BAC4"
-                foot="nM"
-              />
-            </dl>
-
-            <div className="flex items-center gap-2 px-3.5 py-2 border-t border-[#1B2833] text-[10px]">
-              <span
-                className={`px-1.5 py-[1px] rounded border ${
-                  out
-                    ? 'text-[#E9A76A] border-[#5C4630]'
-                    : 'text-[#59C9C0] border-[#2A5F5C]'
-                }`}
-                title={
-                  out
-                    ? 'Max Tanimoto below 0.272: the model is extrapolating here.'
-                    : 'Close enough to the training set for the model to interpolate.'
+            {/* badges */}
+            <div className="flex flex-wrap gap-1.5">
+              <Badge
+                ok={inDomain}
+                hint={
+                  inDomain
+                    ? 'Close enough to the training set for the model to interpolate.'
+                    : 'Max Tanimoto below 0.272: the model is extrapolating here.'
                 }
               >
-                {out ? 'outside domain' : 'in domain'}
-              </span>
-              <span className="font-mono text-[#627783]">T {fmt(r.maxTanimoto)}</span>
-              <span className="font-mono text-[#627783]">QED {fmt(r.qed, 2)}</span>
+                {inDomain ? 'Inside domain' : 'Outside domain'}
+              </Badge>
+              {r.lipinskiViolations != null && (
+                <Badge ok={r.lipinskiViolations <= 1}>
+                  Lipinski violations {r.lipinskiViolations}
+                </Badge>
+              )}
+              {r.veberPass != null && (
+                <Badge ok={r.veberPass}>{r.veberPass ? 'Veber pass' : 'Veber fail'}</Badge>
+              )}
+              {r.inTrainingSet && (
+                <Badge ok hint="This compound was used to fit the model.">
+                  In training set
+                </Badge>
+              )}
               {r.dockingConfidence != null && (
-                <span className="ml-auto font-mono text-[#A79BEE]">
-                  dock {fmt(r.dockingConfidence)}
+                <Badge ok hint={r.dockingSite}>
+                  Docked {fmt(r.dockingConfidence)}
+                </Badge>
+              )}
+            </div>
+
+            {/* meters */}
+            <div className="space-y-2.5">
+              <Meter
+                label="Similarity to training set (Tanimoto)"
+                value={r.maxTanimoto}
+                good={(r.maxTanimoto ?? 0) >= 0.272}
+                hint="Applicability-domain threshold is 0.272."
+              />
+              <Meter
+                label="Drug-likeness (QED)"
+                value={r.qed}
+                good={(r.qed ?? 0) >= 0.5}
+              />
+            </div>
+
+            {/* footer */}
+            <div className="flex items-center gap-4 pt-3 border-t border-[#1B2833] text-[10px] font-mono text-[#627783]">
+              <span>MW {fmt(r.molecularWeight, 1)}</span>
+              <span>cLogP {fmt(r.clogp)}</span>
+              {r.dockingOperationId && (
+                <span className="ml-auto text-[#3E8299] truncate max-w-[150px]">
+                  {r.dockingOperationId}
                 </span>
               )}
             </div>
@@ -1070,21 +1149,6 @@ const CandidateCards: React.FC<{
       })}
     </div>
   </section>
-);
-
-const Cell: React.FC<{ label: string; value: string; tone: string; foot: string }> = ({
-  label,
-  value,
-  tone,
-  foot,
-}) => (
-  <div className="px-3 py-2">
-    <dt className="text-[9px] uppercase tracking-[0.1em] text-[#627783]">{label}</dt>
-    <dd className="font-mono text-[14px] mt-0.5" style={{ color: tone }}>
-      {value}
-    </dd>
-    <div className="text-[9px] text-[#4C5E6B]">{foot}</div>
-  </div>
 );
 
 const DockingTable: React.FC<{ rows: CandidateRow[] }> = ({ rows }) => (
