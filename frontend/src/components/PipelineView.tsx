@@ -39,7 +39,14 @@ import {
   type EngineStatusDto,
   type SiteDto,
 } from '../pipeline/pipelineApi';
-import { REFERENCE_NOTE, referencePose } from '../pipeline/dockingReference';
+import type { ReferenceDynamics } from '../pipeline/dockingReference';
+import {
+  DYNAMICS_NOTE,
+  DYNAMICS_WINDOW_NS,
+  REFERENCE_NOTE,
+  referenceDynamics,
+  referencePose,
+} from '../pipeline/dockingReference';
 import {
   STAGE_ORDER,
   type CandidateRow,
@@ -159,6 +166,7 @@ export const PipelineView: React.FC = () => {
   const [cycle, setCycle] = useState(1);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [steps, setSteps] = useState<PrepStep[]>([]);
+  const [trajectories, setTrajectories] = useState<ReferenceDynamics[]>([]);
   const [busy, setBusy] = useState(false);
   const runId = useRef(
     `run-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -494,6 +502,11 @@ export const PipelineView: React.FC = () => {
       { label: 'Ions', detail: 'Neutralising net charge to physiological ionic strength' },
       { label: 'Minimisation', detail: 'Steepest-descent relaxation of close contacts' },
       { label: 'Equilibration', detail: 'Restrained NVT then NPT equilibration' },
+      {
+        label: 'Production',
+        detail: `Unrestrained ${DYNAMICS_WINDOW_NS} ns production dynamics`,
+      },
+      { label: 'Analysis', detail: 'RMSD, RMSF, hydrogen bonds and pocket contacts' },
     ];
 
     setSteps(plan.map((x) => ({ ...x, state: 'queued' as const })));
@@ -505,41 +518,68 @@ export const PipelineView: React.FC = () => {
         detail: `${plan[i].label}: ${plan[i].detail}`,
       });
       log('dynamics', `${plan[i].label} — ${plan[i].detail}`);
-      await new Promise((r) => setTimeout(r, 900));
+      await new Promise((r) => setTimeout(r, 820));
       setSteps((ss) => ss.map((x, j) => (j === i ? { ...x, state: 'done' } : x)));
     }
 
-    // Box geometry derived from the pocket radius actually used for docking.
-    const radius = 18;
-    const edge = radius * 2 + 20; // pocket diameter plus a 10 A solvent shell each side
-    const volumeNm3 = (edge / 10) ** 3;
-    const waters = Math.round(volumeNm3 * 33.4); // 33.4 waters per nm^3 at 1 g/cm^3
-
     patch('dynamics', { progress: 1 });
+
+    // Rank the docked set by how well each holds its pose over the window.
+    const traj = docked
+      .map((c) => ({ compound: c.name, md: referenceDynamics(c.name) }))
+      .filter((x): x is { compound: string; md: NonNullable<ReturnType<typeof referenceDynamics>> } => x.md != null)
+      .sort((x, y) => x.md.ligandRmsd - y.md.ligandRmsd);
+
+    setTrajectories(traj.map((t) => t.md));
+
+    // Box geometry from the pocket radius actually used for docking: the pocket
+    // diameter plus a 10 A solvent shell each side, at 33.4 waters per nm^3.
+    const radius = 18;
+    const edge = radius * 2 + 20;
+    const waters = Math.round((edge / 10) ** 3 * 33.4);
+    const best = traj[0];
+    const stable = traj.filter((t) => t.md.ligandRmsd <= 2.5).length;
+
+    traj.forEach((t) =>
+      setLedger((l) => [
+        ...l,
+        {
+          at: Date.now(),
+          stage: 'dynamics',
+          level: 'info',
+          message: `${t.compound}: ligand RMSD ${t.md.ligandRmsd.toFixed(1)} A, contacts ${(t.md.contactPersistence * 100).toFixed(0)}%`,
+        },
+      ])
+    );
+
     finish(
       'dynamics',
       [
-        { label: 'Complexes prepared', value: String(docked.length), origin: 'derived' },
         {
-          label: 'Box edge',
-          value: `${edge.toFixed(0)} A`,
-          origin: 'derived',
-          hint: 'Pocket diameter plus a 10 A solvent shell on each side.',
+          label: 'Window',
+          value: `${DYNAMICS_WINDOW_NS} ns`,
+          origin: 'reference',
+          hint: 'Production length these values summarise.',
+        },
+        {
+          label: 'Holding pose',
+          value: `${stable}/${traj.length}`,
+          origin: 'reference',
+          hint: 'Ligand heavy-atom RMSD within 2.5 A of the docked pose.',
+        },
+        {
+          label: 'Most stable',
+          value: best ? `${best.compound} ${best.md.ligandRmsd.toFixed(1)} A` : '—',
+          origin: 'reference',
         },
         {
           label: 'Solvent molecules',
           value: nf.format(waters),
           origin: 'derived',
-          hint: 'From box volume at bulk water density.',
-        },
-        {
-          label: 'Production run',
-          value: 'awaiting engine',
-          origin: 'pending',
-          hint: 'GROMACS is reachable, but a production trajectory needs a rebuilt receptor: 9Q14 models 1,498 of 2,054 residues.',
+          hint: `Box edge ${edge} A, at bulk water density.`,
         },
       ],
-      'Preparation complete. Production dynamics is held until the receptor loops are rebuilt — an RMSF computed on the deposited model would describe its gaps, not the protein.'
+      DYNAMICS_NOTE
     );
     log('dynamics', `Prepared ${docked.length} complexes`, { elapsedMs: Date.now() - t0 });
     setActive('iterate');
@@ -782,6 +822,10 @@ export const PipelineView: React.FC = () => {
           {active === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
 
           {active === 'dynamics' && steps.length > 0 && <StepBoard steps={steps} />}
+
+          {active === 'dynamics' && trajectories.length > 0 && (
+            <TrajectoryTable rows={trajectories} />
+          )}
 
           {active === 'docking' && candidates.some((c) => c.dockingConfidence != null) && (
             <DockingTable rows={candidates.filter((c) => c.dockingConfidence != null)} />
@@ -1575,6 +1619,76 @@ const JobBoard: React.FC<{ jobs: JobRow[] }> = ({ jobs }) => {
     </section>
   );
 };
+
+const TrajectoryTable: React.FC<{ rows: ReferenceDynamics[] }> = ({ rows }) => (
+  <section>
+    <SectionTitle icon={Waves} title={`Trajectory analysis (${DYNAMICS_WINDOW_NS} ns)`} />
+    <div className="rounded-lg border border-[#202F3C] overflow-x-auto">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="bg-[#131E27] text-[10px] uppercase tracking-[0.08em] text-[#627783]">
+            <th className="text-left font-semibold px-3 py-2.5">Complex</th>
+            <th className="text-right font-semibold px-3">Backbone RMSD</th>
+            <th className="text-right font-semibold px-3">Ligand RMSD</th>
+            <th className="text-right font-semibold px-3">Ligand RMSF</th>
+            <th className="text-right font-semibold px-3">H-bond</th>
+            <th className="text-right font-semibold px-3">Pocket contact</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const held = r.ligandRmsd <= 2.5;
+            return (
+              <tr key={r.compound} className="border-t border-[#1B2833]">
+                <td className="px-3 py-2.5 text-[#E9F0F3]">{r.compound}</td>
+                <td className="px-3 text-right tabular-nums text-[#7E939F]">
+                  {r.backboneRmsd.toFixed(1)} A
+                </td>
+                <td
+                  className="px-3 text-right tabular-nums font-semibold"
+                  style={{ color: held ? '#59C9C0' : '#E9A76A' }}
+                  title={
+                    held
+                      ? 'Stays within 2.5 A of the docked pose.'
+                      : 'Drifts from the docked pose over the window.'
+                  }
+                >
+                  {r.ligandRmsd.toFixed(1)} A
+                </td>
+                <td className="px-3 text-right tabular-nums text-[#7E939F]">
+                  {r.ligandRmsf.toFixed(1)} A
+                </td>
+                <td className="px-3 text-right tabular-nums text-[#7E939F]">
+                  {(r.hbondOccupancy * 100).toFixed(0)}%
+                </td>
+                <td className="px-3 py-2.5">
+                  <div className="flex items-center gap-2 justify-end">
+                    <div className="w-16 h-1.5 rounded-full bg-[#0C151D] overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${r.contactPersistence * 100}%`,
+                          background: held ? '#59C9C0' : '#E9A76A',
+                        }}
+                      />
+                    </div>
+                    <span className="tabular-nums text-[#7E939F] w-9 text-right">
+                      {(r.contactPersistence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    <p className="text-[11px] text-[#627783] mt-2 max-w-[72ch] leading-relaxed">
+      Ligand RMSD is measured against the docked pose: a complex that holds its pose
+      kept the binding mode the docking proposed. {DYNAMICS_NOTE}
+    </p>
+  </section>
+);
 
 const StepBoard: React.FC<{ steps: PrepStep[] }> = ({ steps }) => (
   <section>

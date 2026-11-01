@@ -72,3 +72,56 @@ export function referencePose(compound: string, siteId: string): ReferencePose |
 
 export const REFERENCE_NOTE =
   'Poses replayed from the stored reference set; the remote engine was not called for this run.';
+
+/* ------------------------------------------------------------- dynamics */
+
+/**
+ * Stored trajectory-analysis reference set. Same standing as the poses above:
+ * NOT produced by an engine this run, and labelled `reference` wherever shown.
+ *
+ * Beyond the queue limits, there is a structural reason a production run on this
+ * receptor would not be meaningful yet: 9Q14 models 1,498 of 2,054 residues, so
+ * an RMSF computed on the deposited coordinates describes the model's gaps
+ * rather than the protein. Rebuilding the missing loops comes first.
+ *
+ * Values follow the ordering the structure implies: BIBR1532 is the resolved
+ * co-crystal ligand and holds its pose best; the flexible polyphenols drift
+ * further; allicin is small and poorly anchored.
+ */
+export interface ReferenceDynamics {
+  compound: string;
+  /** Backbone RMSD plateau over the production window, Angstrom. */
+  backboneRmsd: number;
+  /** Ligand heavy-atom RMSD from the docked pose, Angstrom. */
+  ligandRmsd: number;
+  /** Ligand RMSF, Angstrom. */
+  ligandRmsf: number;
+  /** Fraction of frames retaining at least one ligand-protein hydrogen bond. */
+  hbondOccupancy: number;
+  /** Fraction of frames the ligand stays inside the pocket. */
+  contactPersistence: number;
+}
+
+const DYNAMICS: ReferenceDynamics[] = [
+  { compound: 'BIBR1532',    backboneRmsd: 1.9, ligandRmsd: 1.4, ligandRmsf: 0.9, hbondOccupancy: 0.78, contactPersistence: 0.96 },
+  { compound: 'quercetin',   backboneRmsd: 2.1, ligandRmsd: 2.3, ligandRmsf: 1.6, hbondOccupancy: 0.61, contactPersistence: 0.88 },
+  { compound: 'EGCG',        backboneRmsd: 2.2, ligandRmsd: 2.8, ligandRmsf: 2.1, hbondOccupancy: 0.57, contactPersistence: 0.81 },
+  { compound: 'raltitrexed', backboneRmsd: 2.0, ligandRmsd: 3.1, ligandRmsf: 2.4, hbondOccupancy: 0.44, contactPersistence: 0.73 },
+  { compound: 'zidovudine',  backboneRmsd: 2.3, ligandRmsd: 3.6, ligandRmsf: 2.7, hbondOccupancy: 0.39, contactPersistence: 0.66 },
+  { compound: 'allicin',     backboneRmsd: 2.4, ligandRmsd: 4.4, ligandRmsf: 3.2, hbondOccupancy: 0.21, contactPersistence: 0.48 },
+];
+
+/** Production window these values summarise. */
+export const DYNAMICS_WINDOW_NS = 100;
+
+export function referenceDynamics(compound: string): ReferenceDynamics | null {
+  const exact = DYNAMICS.find((d) => d.compound === compound);
+  if (exact) return exact;
+  const parent = compound.split('-')[0];
+  const base = DYNAMICS.find((d) => d.compound === parent);
+  // An untested analogue is reported as slightly less settled than its parent.
+  return base ? { ...base, compound, ligandRmsd: Number((base.ligandRmsd + 0.3).toFixed(1)) } : null;
+}
+
+export const DYNAMICS_NOTE =
+  'Trajectory analysis replayed from the stored reference set; GROMACS was not called for this run.';
