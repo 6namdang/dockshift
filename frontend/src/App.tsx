@@ -6,13 +6,10 @@
 import React, { useState, useEffect } from 'react';
 import { NavigationSidebar, NavigationTab } from './components/NavigationSidebar';
 import { PipelineView } from './components/PipelineView';
-import { ScreenView } from './components/ScreenView';
 import { MolecularViewer } from './components/MolecularViewer';
 import { MolecularInspector } from './components/MolecularInspector';
-import { CompareView } from './components/CompareView';
 import { AgentRunsView } from './components/AgentRunsView';
 import { LiteratureView } from './components/LiteratureView';
-import { ResearchNotesView } from './components/ResearchNotesView';
 import {
   dockingService,
   TARGET_TELOMERASE_9Q14,
@@ -37,7 +34,6 @@ export default function App() {
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>('bibr1532');
   const [dockingResults, setDockingResults] = useState<Record<string, DockingResult>>(INITIAL_DOCKING_RESULTS);
   const [notes, setNotes] = useState<ResearchNote[]>(INITIAL_RESEARCH_NOTES);
-  const [isNotesOpen, setIsNotesOpen] = useState<boolean>(false);
   const [isLoadingScreening, setIsLoadingScreening] = useState<boolean>(false);
   const [screeningSource, setScreeningSource] = useState<'backend' | 'demo'>('backend');
 
@@ -77,20 +73,6 @@ export default function App() {
   // Global keyboard shortcuts for navigation and Research Notes overlay
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // 1. Toggle Research Notes overlay: Ctrl+Shift+N or Cmd+Shift+N
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
-        e.preventDefault();
-        setIsNotesOpen((prev) => !prev);
-        return;
-      }
-
-      // 2. Close overlay if open: Escape
-      if (e.key === 'Escape' && isNotesOpen) {
-        e.preventDefault();
-        setIsNotesOpen(false);
-        return;
-      }
-
       // Avoid capturing single-key numbers when typing inside interactive elements
       const activeElem = document.activeElement;
       const isInputActive =
@@ -114,26 +96,16 @@ export default function App() {
             break;
           case '2':
             e.preventDefault();
-            setActiveTab('screen');
-            setFocusedResidue(null);
+            setActiveTab('playground');
             break;
           case '3':
             e.preventDefault();
-            setActiveTab('playground');
+            setActiveTab('literature');
+            setFocusedResidue(null);
             break;
           case '4':
             e.preventDefault();
-            setActiveTab('compare');
-            setFocusedResidue(null);
-            break;
-          case '6':
-            e.preventDefault();
             setActiveTab('agents');
-            setFocusedResidue(null);
-            break;
-          case '5':
-            e.preventDefault();
-            setActiveTab('literature');
             setFocusedResidue(null);
             break;
         }
@@ -142,7 +114,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isNotesOpen]);
+  }, []);
 
   const handleToggleVisibility = (key: keyof ComponentVisibility) => {
     setVisibility((prev) => ({
@@ -206,7 +178,6 @@ export default function App() {
       `Inspected candidate ${candidate.name} targeting ${candidate.targetSite}. QSAR predicted pIC50: ${candidate.prediction?.predicted_pic50.toFixed(2) || '—'}. Awaiting 3D docking pipeline execution.`,
       `Pipeline Record: ${candidate.name}`
     );
-    setIsNotesOpen(true);
   };
 
   const handleUpdateNote = (id: string, updates: Partial<Omit<ResearchNote, 'id'>>) => {
@@ -228,8 +199,6 @@ export default function App() {
           setActiveTab(tab);
           setFocusedResidue(null);
         }}
-        noteCount={notes.length}
-        onOpenNotes={() => setIsNotesOpen(true)}
       />
 
       {/* 2. Main Center Workspace */}
@@ -238,22 +207,6 @@ export default function App() {
         {activeTab === 'pipeline' && (
           <div className="flex-1 h-full min-h-0">
             <PipelineView />
-          </div>
-        )}
-
-        {/* 2. SCREEN TAB */}
-        {activeTab === 'screen' && (
-          <div className="flex-1 h-full">
-            <ScreenView
-              protein={protein}
-              candidates={candidates}
-              selectedCandidateId={selectedCandidateId}
-              onSelectCandidate={setSelectedCandidateId}
-              onExploreInPlayground={handleExploreInPlayground}
-              onRunScreening={handleRunScreening}
-              isLoadingScreening={isLoadingScreening}
-              source={screeningSource}
-            />
           </div>
         )}
 
@@ -294,23 +247,7 @@ export default function App() {
               selectedCandidateId={selectedCandidateId}
               onSelectCandidate={setSelectedCandidateId}
               dockingResults={dockingResults}
-              onNavigateToCompare={() => setActiveTab('compare')}
               onAddNoteForCandidate={handleAddNoteForCandidate}
-            />
-          </div>
-        )}
-
-        {/* 4. COMPARE TAB */}
-        {activeTab === 'compare' && (
-          <div className="flex-1 h-full">
-            <CompareView
-              protein={protein}
-              candidates={candidates}
-              dockingResults={dockingResults}
-              notes={notes}
-              onAddNoteForCandidate={handleAddNoteForCandidate}
-              onNavigateToTab={(tab) => setActiveTab(tab)}
-              onExploreInPlayground={handleExploreInPlayground}
             />
           </div>
         )}
@@ -326,45 +263,6 @@ export default function App() {
       </main>
 
       {/* Accessible Slide-over / Modal for Research Notes */}
-      {isNotesOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-[#0C1423]/80 backdrop-blur-sm flex justify-end cursor-pointer"
-          onClick={() => setIsNotesOpen(false)}
-        >
-          <div
-            className="w-full max-w-2xl h-full bg-[#0C1423] border-l border-[#1c2e4a] shadow-2xl flex flex-col animate-slideLeft cursor-default"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-[#1c2e4a] bg-[#121c2e] flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-4 h-4 text-[#63E6DE]" />
-                <h2 className="text-sm font-bold text-[#F2F7FF]">
-                  Research Notes &amp; Lab Notebook
-                </h2>
-                <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#152237] text-[#5E7594] border border-[#1e3250]">
-                  Esc to close
-                </kbd>
-              </div>
-              <button
-                onClick={() => setIsNotesOpen(false)}
-                className="p-1 rounded-lg text-[#91A6BE] hover:text-[#F2F7FF] hover:bg-[#152237] transition"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-hidden">
-              <ResearchNotesView
-                protein={protein}
-                notes={notes}
-                onAddNote={handleAddNote}
-                onUpdateNote={handleUpdateNote}
-                onDeleteNote={handleDeleteNote}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

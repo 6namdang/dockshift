@@ -31,7 +31,6 @@ interface MolecularInspectorProps {
   selectedCandidateId: string;
   onSelectCandidate: (candidateId: string) => void;
   dockingResults: Record<string, DockingResult>;
-  onNavigateToCompare: () => void;
   onAddNoteForCandidate: (candidateId: string) => void;
 }
 
@@ -46,7 +45,6 @@ export const MolecularInspector: React.FC<MolecularInspectorProps> = ({
   selectedCandidateId,
   onSelectCandidate,
   dockingResults,
-  onNavigateToCompare,
   onAddNoteForCandidate
 }) => {
   const [showStructuralDetails, setShowStructuralDetails] = useState<boolean>(false);
@@ -310,13 +308,7 @@ export const MolecularInspector: React.FC<MolecularInspectorProps> = ({
               )}
 
               <div className="flex items-center gap-1.5 pt-1">
-                <button
-                  onClick={onNavigateToCompare}
-                  className="flex-1 py-1.5 px-2 rounded-lg bg-[#1E2D3A] hover:bg-[#243746] text-[#59C9C0] text-[11px] font-medium border border-[#59C9C0]/30 transition flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <span>Compare Benchmarks</span>
-                  <ArrowRight className="w-3 h-3" />
-                </button>
+                <></>
                 <button
                   onClick={() => onAddNoteForCandidate(currentCandidate.id)}
                   title="Add Note for Candidate"

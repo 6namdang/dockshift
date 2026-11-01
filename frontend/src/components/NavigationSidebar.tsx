@@ -18,26 +18,16 @@ import {
 import { DockShiftLogo } from './DockShiftLogo';
 import { TargetStructureThumb } from './TargetStructureThumb';
 
-export type NavigationTab =
-  | 'pipeline'
-  | 'screen'
-  | 'playground'
-  | 'compare'
-  | 'literature'
-  | 'agents';
+export type NavigationTab = 'pipeline' | 'playground' | 'literature' | 'agents';
 
 interface NavigationSidebarProps {
   activeTab: NavigationTab;
   onSelectTab: (tab: NavigationTab) => void;
-  noteCount: number;
-  onOpenNotes?: () => void;
 }
 
 export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
   activeTab,
   onSelectTab,
-  noteCount,
-  onOpenNotes
 }) => {
   const navItems: {
     id: NavigationTab;
@@ -54,36 +44,22 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
       desc: 'Target to iteration, one run'
     },
     {
-      id: 'screen',
-      num: 2,
-      label: 'Screening',
-      icon: Crosshair,
-      desc: 'QSAR potency and domain'
-    },
-    {
       id: 'playground',
-      num: 3,
+      num: 2,
       label: 'Structure',
       icon: Sliders,
       desc: 'Receptor and pose inspection'
     },
     {
-      id: 'compare',
-      num: 4,
-      label: 'Compare',
-      icon: GitCompare,
-      desc: 'Candidate benchmark matrix'
-    },
-    {
       id: 'literature',
-      num: 5,
+      num: 3,
       label: 'Literature',
       icon: Search,
       desc: 'Indexed source search'
     },
     {
       id: 'agents',
-      num: 6,
+      num: 4,
       label: 'Agents',
       icon: Activity,
       desc: 'Run state and remote engines'
@@ -206,39 +182,6 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
         </nav>
       </div>
 
-      {/* Bottom Section: Research Notes & Global Shortcut Helpers */}
-      <div className="p-3 border-t border-[#202F3C] space-y-2">
-        {onOpenNotes && (
-          <button
-            onClick={onOpenNotes}
-            title="Open Lab Research Notes (Ctrl+Shift+N)"
-            className="w-full px-3 py-2 rounded-xl bg-[#18232D]/70 hover:bg-[#18232D] border border-[#202F3C] hover:border-[#59C9C0]/30 text-[#90A4AF] hover:text-[#E9F0F3] transition flex items-center justify-between cursor-pointer group"
-          >
-            <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-[#59C9C0] group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-medium">Research Notes</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              {noteCount > 0 && (
-                <span className="px-1.5 py-0.5 text-[9px] font-mono font-bold rounded-full bg-[#E9A76A] text-[#0B1118]">
-                  {noteCount}
-                </span>
-              )}
-              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-[#0B1118] text-[#627783] border border-[#202F3C]">
-                ^⇧N
-              </kbd>
-            </div>
-          </button>
-        )}
-
-        <div className="px-2 py-1.5 rounded-lg bg-[#18232D]/40 border border-[#202F3C]/50 flex items-center justify-between text-[10px] text-[#627783]">
-          <span className="flex items-center gap-1">
-            <Keyboard className="w-3 h-3 text-[#59C9C0]" />
-            <span>Shortcuts:</span>
-          </span>
-          <span className="font-mono">Press 1-6 to switch</span>
-        </div>
-      </div>
     </aside>
   );
 };

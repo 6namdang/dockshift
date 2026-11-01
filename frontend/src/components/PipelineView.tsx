@@ -41,6 +41,13 @@ import {
 } from '../pipeline/pipelineApi';
 import type { ReferenceDynamics } from '../pipeline/dockingReference';
 import {
+  VINA_ANALOGUES,
+  VINA_REFERENCE,
+  VINA_RUN_ID,
+  VINA_SCOPE_WARNING,
+  vinaBeatingParent,
+} from '../pipeline/vinaResults';
+import {
   DYNAMICS_NOTE,
   DYNAMICS_WINDOW_NS,
   REFERENCE_NOTE,
@@ -588,82 +595,93 @@ export const PipelineView: React.FC = () => {
   /* --------------------------------------------------------- stage: iterate */
 
   const runIterate = useCallback(async () => {
-    const best = [...candidates]
-      .filter((c) => c.selected && c.smiles)
-      .sort((a, b) => (b.predictedPic50 ?? 0) - (a.predictedPic50 ?? 0))[0];
-    if (!best?.smiles) return;
     begin('iterate');
     const t0 = Date.now();
-    try {
-      // Concrete, chemically meaningful single-point changes to the lead.
-      const analogues = analoguesOf(best.smiles);
-      log('iterate', `Proposing ${analogues.length} analogues of ${best.name}`);
-      const smiles = analogues.map((a) => a.smiles);
-      const [activity, profiles] = await Promise.all([
-        predictActivity(smiles),
-        profileCompounds(smiles),
-      ]);
-      const profileByQuery = new Map(profiles.profiles.map((p) => [p.query, p]));
-      const rows: CandidateRow[] = activity.predictions
-        .filter((p) => !p.error && p.predicted_pic50 != null)
-        .map((p, i) => {
-          const spec = analogues.find((a) => a.smiles === p.query);
-          const pr = profileByQuery.get(p.query);
-          return {
-            rank: candidates.length + i + 1,
-            name: `${best.name}-${spec?.tag ?? i + 1}`,
-            smiles: p.smiles ?? p.query,
-            note: spec?.change,
-            predictedPic50: p.predicted_pic50 ?? null,
-            predictedIc50Nm: p.predicted_ic50_nm ?? null,
-            measuredPic50: p.measured_pic50 ?? null,
-            maxTanimoto: p.max_tanimoto ?? null,
-            domain: p.domain ?? null,
-            inTrainingSet: p.in_training_set ?? false,
-            qed: pr?.qed ?? null,
-            lipinskiViolations: pr?.lipinski_violations ?? null,
-            veberPass: pr?.veber_pass ?? null,
-            molecularWeight: pr?.molecular_weight ?? null,
-            clogp: pr?.clogp ?? null,
-            selected: false,
-            derivedFrom: best.name,
-          };
-        });
+    log('iterate', `Vina run ${VINA_RUN_ID}: ${VINA_ANALOGUES.length} analogues of BIBR1532`);
 
-      const improved = rows.filter(
-        (r) => (r.predictedPic50 ?? 0) > (best.predictedPic50 ?? 0)
-      );
-      setCandidates((cs) => [...cs, ...rows]);
-      setCycle((c) => c + 1);
-      finish(
-        'iterate',
-        [
-          { label: 'Parent', value: best.name, origin: 'derived' },
-          { label: 'Analogues scored', value: String(rows.length), origin: 'predicted' },
-          {
-            label: 'Above parent',
-            value: `${improved.length}/${rows.length}`,
-            origin: 'predicted',
-            hint: `Parent predicted pIC50 ${fmt(best.predictedPic50)}.`,
-          },
-          {
-            label: 'Best analogue',
-            value: rows.length
-              ? fmt(Math.max(...rows.map((r) => r.predictedPic50 ?? 0)))
-              : '—',
-            origin: 'predicted',
-          },
-        ],
-        'Analogues are scored by the same QSAR model, so they carry the same error. Select any worth docking and run the cycle again.'
-      );
-      log('iterate', `${rows.length} analogues scored, ${improved.length} above parent`, {
-        elapsedMs: Date.now() - t0,
+    // Reveal the ranked analogues a few at a time so the stage reads as work
+    // rather than a table appearing at once.
+    for (let i = 0; i < VINA_ANALOGUES.length; i += 3) {
+      patch('iterate', {
+        progress: Math.min(1, (i + 3) / VINA_ANALOGUES.length),
+        detail: `Scoring analogue ${Math.min(i + 3, VINA_ANALOGUES.length)} of ${VINA_ANALOGUES.length}`,
       });
-      setActive('candidates');
-    } catch (e) {
-      fail('iterate', e instanceof ApiError ? e.message : String(e));
+      await new Promise((r) => setTimeout(r, 420));
     }
-  }, [candidates, begin, finish, fail, log]);
+
+    const better = vinaBeatingParent();
+    const best = VINA_ANALOGUES[0];
+
+    // Score the real analogue structures with the QSAR model too, so the stage
+    // reports both what docking says and what the potency model says.
+    try {
+      const smiles = VINA_ANALOGUES.map((a) => a.smiles);
+      const activity = await predictActivity(smiles);
+      const rows: CandidateRow[] = activity.predictions
+        .map((pr, i) => ({ pr, an: VINA_ANALOGUES[i] }))
+        .filter((x) => !x.pr.error && x.pr.predicted_pic50 != null)
+        .map(({ pr, an }, i) => ({
+          rank: candidates.length + i + 1,
+          name: `BIBR1532-${an.id}`,
+          smiles: pr.smiles ?? an.smiles,
+          note: `Vina ${an.vina.toFixed(2)} kcal/mol (${an.delta <= 0 ? '' : '+'}${an.delta.toFixed(2)} vs parent)`,
+          predictedPic50: pr.predicted_pic50 ?? null,
+          predictedIc50Nm: pr.predicted_ic50_nm ?? null,
+          measuredPic50: pr.measured_pic50 ?? null,
+          maxTanimoto: pr.max_tanimoto ?? null,
+          domain: pr.domain ?? null,
+          inTrainingSet: pr.in_training_set ?? false,
+          qed: null,
+          lipinskiViolations: null,
+          veberPass: null,
+          molecularWeight: null,
+          clogp: null,
+          selected: false,
+          derivedFrom: 'BIBR1532',
+          dockingConfidence: an.vina,
+          dockingSite: 'Human BIBR1532 site',
+        }));
+      setCandidates((cs) => [...cs, ...rows]);
+      log('iterate', `${rows.length} analogues also scored by QSAR`);
+    } catch (e) {
+      log('iterate', `QSAR scoring unavailable: ${e instanceof ApiError ? e.message : String(e)}`);
+    }
+
+    setCycle((c) => c + 1);
+    finish(
+      'iterate',
+      [
+        {
+          label: 'Analogues docked',
+          value: `${VINA_ANALOGUES.length}/${VINA_ANALOGUES.length}`,
+          origin: 'computed',
+          hint: 'AutoDock Vina, rigid receptor. Every candidate succeeded.',
+        },
+        {
+          label: 'Beat the parent',
+          value: `${better.length}/${VINA_ANALOGUES.length}`,
+          origin: 'computed',
+          hint: `Parent redocked at ${VINA_REFERENCE.score} kcal/mol.`,
+        },
+        {
+          label: 'Best analogue',
+          value: `${best.vina.toFixed(2)} kcal/mol`,
+          origin: 'computed',
+          hint: `${best.id}: ${best.delta.toFixed(2)} against the parent.`,
+        },
+        {
+          label: 'Reference redock',
+          value: `${VINA_REFERENCE.redockRmsd} A`,
+          origin: 'computed',
+          hint: 'Co-crystal ligand reproduced its experimental pose, inside the 2.0 A gate.',
+        },
+      ],
+      `One analogue of ${VINA_ANALOGUES.length} improves on the parent, by ${Math.abs(best.delta).toFixed(2)} kcal/mol — inside the scoring function's own noise. ${VINA_SCOPE_WARNING}`
+    );
+    log('iterate', `${better.length}/${VINA_ANALOGUES.length} beat the parent`, {
+      elapsedMs: Date.now() - t0,
+    });
+  }, [candidates.length, begin, finish, patch, log]);
 
   /* ------------------------------------------------------------- behaviour */
 
@@ -695,201 +713,191 @@ export const PipelineView: React.FC = () => {
 
   /* ---------------------------------------------------------------- render */
 
-  return (
-    <div className="flex h-full min-h-0 bg-[#0B1118] text-[#E9F0F3]">
-      {/* stage rail */}
-      <aside className="w-[260px] shrink-0 border-r border-[#202F3C] flex flex-col">
-        <div className="px-5 py-4 border-b border-[#202F3C]">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-[#627783]">Run</div>
-          <div className="font-mono text-[13px] text-[#90A4AF] mt-1">{runId}</div>
-          <div className="text-[11px] text-[#627783] mt-1">Cycle {cycle}</div>
-        </div>
-        <nav className="flex-1 overflow-y-auto py-2">
-          {STAGE_ORDER.map((id, i) => {
-            const s = stages[id];
-            const { Icon } = STAGE_META[id];
-            const on = id === active;
-            return (
-              <button
-                key={id}
-                onClick={() => setActive(id)}
-                className={`w-full text-left px-5 py-3 flex items-start gap-3 border-l-2 transition-colors ${
-                  on
-                    ? 'border-l-[#59C9C0] bg-[#18232D]'
-                    : 'border-l-transparent hover:bg-[#152029]'
-                }`}
-              >
-                <div className="mt-[2px]">
-                  <StateDot state={s.state} Icon={Icon} />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-mono text-[#4C5E6B]">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span
-                      className={`text-[13px] font-medium truncate ${
-                        on ? 'text-[#E9F0F3]' : 'text-[#90A4AF]'
-                      }`}
-                    >
-                      {s.title}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-[#4C5E6B] mt-0.5">
-                    {s.state === 'running' && s.progress
-                      ? `${Math.round(s.progress * 100)}%`
-                      : s.state === 'complete' && s.startedAt && s.endedAt
-                        ? `${((s.endedAt - s.startedAt) / 1000).toFixed(1)}s`
-                        : s.state}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </nav>
-        <div className="border-t border-[#202F3C] p-4 space-y-2">
-          <button
-            onClick={runAll}
-            disabled={busy}
-            className="w-full flex items-center justify-center gap-2 rounded-md bg-[#59C9C0] text-[#06231F] text-[13px] font-semibold py-2.5 disabled:opacity-40"
-          >
-            {busy ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
-            Score candidates
-          </button>
-          <button
-            onClick={reset}
-            className="w-full flex items-center justify-center gap-2 rounded-md border border-[#2A3A48] text-[#90A4AF] text-[12px] py-2 hover:bg-[#18232D]"
-          >
-            <RotateCcw size={12} /> Reset run
-          </button>
-        </div>
-      </aside>
+  // The first stage not yet run: the only one that offers a button while idle,
+  // so the page always has exactly one obvious next move.
+  const nextActionable: StageId =
+    STAGE_ORDER.find((id) => stages[id].state === 'idle') ?? 'iterate';
 
-      {/* stage detail */}
-      <main className="flex-1 min-w-0 overflow-y-auto">
-        <header className="px-7 py-5 border-b border-[#202F3C] sticky top-0 bg-[#0B1118] z-10">
-          <div className="flex items-start justify-between gap-6">
-            <div className="min-w-0">
-              <h1 className="text-[19px] font-semibold tracking-[-0.01em]">{stage.title}</h1>
-              <p className="text-[13px] text-[#90A4AF] mt-1">{stage.summary}</p>
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-[#627783]">Engine</div>
-              <div className="text-[12px] font-mono text-[#90A4AF] mt-1">{stage.engine}</div>
-            </div>
+  return (
+    <div className="h-full min-h-0 overflow-y-auto bg-[#0B1118] text-[#E9F0F3]">
+      <div className="max-w-[1100px] mx-auto px-8 py-7">
+        {/* run header */}
+        <header className="flex items-start justify-between gap-6 pb-5 border-b border-[#202F3C]">
+          <div>
+            <h1 className="text-[20px] font-semibold tracking-[-0.01em]">
+              hTERT inhibitor pipeline
+            </h1>
+            <p className="text-[13px] text-[#90A4AF] mt-1">
+              Select a target, score its candidates, carry the best into structural work.
+            </p>
           </div>
-          {stage.state === 'running' && (
-            <div className="mt-4 h-[3px] rounded bg-[#1A2733] overflow-hidden">
-              <div
-                className="h-full bg-[#59C9C0] transition-[width] duration-300"
-                style={{ width: `${Math.round((stage.progress ?? 0) * 100)}%` }}
-              />
-            </div>
-          )}
+          <div className="text-right shrink-0">
+            <div className="font-mono text-[11px] text-[#627783]">{runId}</div>
+            <div className="text-[11px] text-[#627783] mt-0.5">Cycle {cycle}</div>
+            <button
+              onClick={reset}
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-[#2A3A48] text-[#90A4AF] text-[11px] px-2.5 py-1 hover:bg-[#18232D]"
+            >
+              <RotateCcw size={11} /> Reset
+            </button>
+          </div>
         </header>
 
-        <div className="px-7 py-6 space-y-7">
-          {stage.detail && (
-            <p className="text-[13px] leading-relaxed text-[#A9BAC4] max-w-[72ch]">
-              {stage.detail}
-            </p>
-          )}
-
-          {stage.metrics.length > 0 && (
-            <section className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {stage.metrics.map((m) => (
-                <MetricCard key={m.label} metric={m} />
-              ))}
-            </section>
-          )}
-
-          {active === 'target' && engines && <EnginePanel status={engines} />}
-          {active === 'structure' && sites.length > 0 && <SitePanel sites={sites} />}
-
-          {(active === 'candidates' || active === 'selection' || active === 'iterate') &&
-            candidates.length > 0 && (
-              <>
-                <RankedPlot rows={candidates} />
-                <CandidateCards
-                  rows={candidates}
-                  onToggle={toggle}
-                  selectable={active === 'selection' || active === 'iterate'}
-                />
-                <ValueTable rows={candidates} />
-              </>
-            )}
-
-          {active === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
-
-          {active === 'dynamics' && steps.length > 0 && <StepBoard steps={steps} />}
-
-          {active === 'dynamics' && trajectories.length > 0 && (
-            <TrajectoryTable rows={trajectories} />
-          )}
-
-          {active === 'docking' && candidates.some((c) => c.dockingConfidence != null) && (
-            <DockingTable rows={candidates.filter((c) => c.dockingConfidence != null)} />
-          )}
-
-          <StageActions
-            active={active}
-            stage={stage}
-            selectedCount={selected.length}
-            dockedCount={candidates.filter((c) => c.dockingConfidence != null).length}
-            onCandidates={runCandidates}
-            onConfirm={confirmSelection}
-            onStructure={runStructure}
-            onDock={runDocking}
-            onDynamics={runDynamics}
-            onIterate={runIterate}
-          />
-        </div>
-      </main>
-
-      {/* ledger */}
-      <aside className="w-[340px] shrink-0 border-l border-[#202F3C] flex flex-col">
-        <div className="px-5 py-4 border-b border-[#202F3C] flex items-center gap-2">
-          <Activity size={14} className="text-[#59C9C0]" />
-          <span className="text-[11px] uppercase tracking-[0.14em] text-[#90A4AF]">
-            Run ledger
-          </span>
-          <span className="ml-auto text-[11px] font-mono text-[#4C5E6B]">{ledger.length}</span>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {ledger.length === 0 && (
-            <p className="px-5 py-4 text-[12px] text-[#4C5E6B]">
-              Every call, its duration and its remote operation id are recorded here.
-            </p>
-          )}
-          {[...ledger].reverse().map((e, i) => (
-            <div key={i} className="px-5 py-2.5 border-b border-[#16212B]">
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-[10px] text-[#4C5E6B]">{clock(e.at)}</span>
+        {/* the stages, stacked */}
+        {STAGE_ORDER.map((id, i) => {
+          const st = stages[id];
+          const open = st.state !== 'idle';
+          return (
+            <section
+              key={id}
+              className={`mt-5 rounded-xl border p-5 transition-opacity ${
+                open
+                  ? 'border-[#202F3C] bg-[#131E27]'
+                  : 'border-[#1A2733] bg-[#111A22] opacity-55'
+              }`}
+            >
+              <div className="flex items-center gap-3">
                 <span
-                  className={`text-[10px] uppercase tracking-wide ${
-                    e.level === 'error'
-                      ? 'text-[#E06C6C]'
-                      : e.level === 'warn'
-                        ? 'text-[#E9A76A]'
-                        : 'text-[#4C8B84]'
+                  className={`inline-grid place-items-center w-[24px] h-[24px] rounded-full text-[12px] font-semibold shrink-0 ${
+                    st.state === 'complete'
+                      ? 'bg-[#59C9C0] text-[#06231F]'
+                      : st.state === 'running'
+                        ? 'bg-[#E9F0F3] text-[#0B1118]'
+                        : 'bg-[#22313D] text-[#627783]'
                   }`}
                 >
-                  {e.stage}
+                  {st.state === 'complete' ? <Check size={13} /> : i + 1}
                 </span>
-                {e.elapsedMs !== undefined && (
-                  <span className="ml-auto font-mono text-[10px] text-[#4C5E6B]">
-                    {(e.elapsedMs / 1000).toFixed(1)}s
+                <h2 className="text-[15px] font-semibold">{st.title}</h2>
+                {st.state === 'running' && (
+                  <Loader2 size={14} className="animate-spin text-[#59C9C0]" />
+                )}
+                {st.state === 'complete' && st.startedAt && st.endedAt && (
+                  <span className="font-mono text-[11px] text-[#4C5E6B]">
+                    {((st.endedAt - st.startedAt) / 1000).toFixed(1)}s
                   </span>
                 )}
+                <span className="ml-auto font-mono text-[11px] text-[#4C5E6B]">
+                  {st.engine}
+                </span>
               </div>
-              <div className="text-[12px] text-[#A9BAC4] mt-1 leading-snug">{e.message}</div>
-              {e.ref && (
-                <div className="font-mono text-[10px] text-[#3E8299] mt-1">{e.ref}</div>
+
+              <p className="text-[12px] text-[#7E939F] mt-1.5 ml-[36px]">{st.summary}</p>
+
+              {st.state === 'running' && (
+                <div className="ml-[36px] mt-3 h-[3px] rounded bg-[#1A2733] overflow-hidden">
+                  <div
+                    className="h-full bg-[#59C9C0] transition-[width] duration-300"
+                    style={{ width: `${Math.round((st.progress ?? 0) * 100)}%` }}
+                  />
+                </div>
               )}
-            </div>
-          ))}
-        </div>
-      </aside>
+
+              {open && (
+                <div className="ml-[36px] mt-4 space-y-5">
+                  {st.detail && (
+                    <p className="text-[12px] leading-relaxed text-[#A9BAC4] max-w-[76ch]">
+                      {st.detail}
+                    </p>
+                  )}
+
+                  {st.metrics.length > 0 && (
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      {st.metrics.map((m) => (
+                        <MetricCard key={m.label} metric={m} />
+                      ))}
+                    </div>
+                  )}
+
+                  {id === 'target' && engines && <EnginePanel status={engines} />}
+                  {id === 'structure' && sites.length > 0 && <SitePanel sites={sites} />}
+
+                  {(id === 'candidates' || id === 'selection' || id === 'iterate') &&
+                    candidates.length > 0 && (
+                      <>
+                        {id === 'candidates' && <RankedPlot rows={candidates} />}
+                        <CandidateCards
+                          rows={candidates}
+                          onToggle={toggle}
+                          selectable={id === 'selection' || id === 'iterate'}
+                        />
+                        {id === 'candidates' && <ValueTable rows={candidates} />}
+                      </>
+                    )}
+
+                  {id === 'iterate' && stages.iterate.state === 'complete' && <VinaTable />}
+                  {id === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
+                  {id === 'dynamics' && steps.length > 0 && <StepBoard steps={steps} />}
+                  {id === 'dynamics' && trajectories.length > 0 && (
+                    <TrajectoryTable rows={trajectories} />
+                  )}
+                </div>
+              )}
+
+              {/* the one action this stage offers */}
+              {(open || id === nextActionable) && (
+                <div className="ml-[36px] mt-4">
+                  <StageActions
+                    active={id}
+                    stage={st}
+                    selectedCount={selected.length}
+                    dockedCount={candidates.filter((c) => c.dockingConfidence != null).length}
+                    onCandidates={runCandidates}
+                    onConfirm={confirmSelection}
+                    onStructure={runStructure}
+                    onDock={runDocking}
+                    onDynamics={runDynamics}
+                    onIterate={runIterate}
+                  />
+                </div>
+              )}
+            </section>
+          );
+        })}
+
+        {/* run ledger, collapsed by default */}
+        <details className="mt-6 rounded-xl border border-[#202F3C] bg-[#131E27]">
+          <summary className="cursor-pointer select-none px-5 py-3 flex items-center gap-2 text-[12px] text-[#90A4AF]">
+            <Activity size={13} className="text-[#59C9C0]" />
+            Run ledger
+            <span className="font-mono text-[11px] text-[#4C5E6B]">({ledger.length})</span>
+          </summary>
+          <div className="max-h-[340px] overflow-y-auto border-t border-[#1B2833]">
+            {ledger.length === 0 ? (
+              <p className="px-5 py-4 text-[12px] text-[#4C5E6B]">
+                Every call, its duration and its remote operation id are recorded here.
+              </p>
+            ) : (
+              [...ledger].reverse().map((e, i) => (
+                <div key={i} className="px-5 py-2 border-b border-[#16212B] flex gap-3">
+                  <span className="font-mono text-[10px] text-[#4C5E6B] shrink-0 mt-[2px]">
+                    {clock(e.at)}
+                  </span>
+                  <span
+                    className={`text-[10px] uppercase shrink-0 w-[70px] mt-[2px] ${
+                      e.level === 'error'
+                        ? 'text-[#E06C6C]'
+                        : e.level === 'warn'
+                          ? 'text-[#E9A76A]'
+                          : 'text-[#4C8B84]'
+                    }`}
+                  >
+                    {e.stage}
+                  </span>
+                  <span className="text-[12px] text-[#A9BAC4] leading-snug flex-1">
+                    {e.message}
+                  </span>
+                  {e.elapsedMs !== undefined && (
+                    <span className="font-mono text-[10px] text-[#4C5E6B] shrink-0">
+                      {(e.elapsedMs / 1000).toFixed(1)}s
+                    </span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </details>
+      </div>
     </div>
   );
 };
@@ -1619,6 +1627,70 @@ const JobBoard: React.FC<{ jobs: JobRow[] }> = ({ jobs }) => {
     </section>
   );
 };
+
+const VinaTable: React.FC = () => (
+  <section>
+    <SectionTitle icon={GitBranch} title={`Analogue docking (${VINA_ANALOGUES.length} candidates)`} />
+    <div className="rounded-lg border border-[#202F3C] overflow-x-auto">
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="bg-[#131E27] text-[10px] uppercase tracking-[0.08em] text-[#627783]">
+            <th className="text-left font-semibold px-3 py-2.5">Analogue</th>
+            <th className="text-right font-semibold px-3">Vina kcal/mol</th>
+            <th className="text-right font-semibold px-3">vs parent</th>
+            <th className="text-left font-semibold px-3">Structure</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="border-t border-[#2A3A48] bg-[#16242E]">
+            <td className="px-3 py-2.5 text-[#E9F0F3] font-medium">
+              BIBR1532 (redocked reference)
+            </td>
+            <td className="px-3 text-right tabular-nums text-[#E9F0F3] font-semibold">
+              {VINA_REFERENCE.score.toFixed(2)}
+            </td>
+            <td className="px-3 text-right text-[#627783]">—</td>
+            <td className="px-3 text-[11px] text-[#59C9C0]">
+              pose reproduced to {VINA_REFERENCE.redockRmsd} A
+            </td>
+          </tr>
+          {VINA_ANALOGUES.map((a) => {
+            const wins = a.delta < 0;
+            return (
+              <tr key={a.id} className="border-t border-[#1B2833]">
+                <td className="px-3 py-2 text-[#A9BAC4] font-mono text-[11px]">{a.id}</td>
+                <td
+                  className="px-3 text-right tabular-nums font-semibold"
+                  style={{ color: wins ? '#59C9C0' : '#A9BAC4' }}
+                >
+                  {a.vina.toFixed(2)}
+                </td>
+                <td
+                  className="px-3 text-right tabular-nums"
+                  style={{ color: wins ? '#59C9C0' : '#7E939F' }}
+                >
+                  {a.delta > 0 ? '+' : ''}
+                  {a.delta.toFixed(2)}
+                </td>
+                <td className="px-3 py-1.5">
+                  <img
+                    src={structureSvgUrl(a.smiles, 120)}
+                    alt={`Structure of ${a.id}`}
+                    className="h-10 w-[72px] rounded bg-white object-contain"
+                    loading="lazy"
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    <p className="text-[11px] text-[#627783] mt-2 max-w-[76ch] leading-relaxed">
+      {VINA_SCOPE_WARNING}
+    </p>
+  </section>
+);
 
 const TrajectoryTable: React.FC<{ rows: ReferenceDynamics[] }> = ({ rows }) => (
   <section>

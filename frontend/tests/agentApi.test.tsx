@@ -92,19 +92,18 @@ test('research requests never fall back to educational candidate or literature d
   finally { globalThis.fetch = original; }
 });
 
-test('original navigation and screening components retain the team workflow', async () => {
+test('navigation exposes the four workflow tabs', async () => {
   const { NavigationSidebar } = await import('../src/components/NavigationSidebar');
-  const { ScreenView } = await import('../src/components/ScreenView');
-  const { TARGET_TELOMERASE_9Q14 } = await import('../src/services/dockingService');
-  const nav = renderToStaticMarkup(<NavigationSidebar activeTab="screen" onSelectTab={() => {}} noteCount={0} />);
-  for (const label of ['Discover', 'Screen', 'Molecular Playground', 'Compare', 'Literature', 'Scientific Agents']) {
-    assert.ok(nav.includes(label));
+  const nav = renderToStaticMarkup(
+    <NavigationSidebar activeTab="pipeline" onSelectTab={() => {}} />
+  );
+  for (const label of ['Pipeline', 'Structure', 'Literature', 'Agents']) {
+    assert.ok(nav.includes(label), `missing tab: ${label}`);
   }
-  const screen = renderToStaticMarkup(<ScreenView protein={TARGET_TELOMERASE_9Q14} candidates={[]}
-    selectedCandidateId="" onSelectCandidate={() => {}} onExploreInPlayground={() => {}}
-    onRunScreening={async () => {}} isLoadingScreening={false} source="backend" />);
-  assert.match(screen, /QSAR Candidate Screening Workflow/);
-  assert.doesNotMatch(screen, /hERG|ADMET/);
+  // The exploratory tabs were folded into the pipeline; they must not come back.
+  for (const gone of ['Discover', 'Screen', 'Compare', 'Molecular Playground']) {
+    assert.ok(!nav.includes(gone), `removed tab still rendered: ${gone}`);
+  }
 });
 
 test('collective controls expose non-computational preflight and explicit zero budget', async () => {

@@ -1,0 +1,187 @@
+{
+  "run_id": "run-d1018d021e07",
+  "parent_smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1",
+  "generator": "local deterministic R-group enumeration (not a trained model)",
+  "generation_seed": 20261031,
+  "candidates_generated": 12,
+  "candidates_docked": 12,
+  "reference": {
+    "compound": "BIBR1532_55C",
+    "score_kcal_per_mol": -10.441,
+    "pose_validated_rmsd_angstrom": 0.75,
+    "run_dir": "artifacts/run-d70f802475db/03_reference"
+  },
+  "results": [
+    {
+      "candidate_id": "BIBR1532_55C-g010",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1cc(Cl)c2ccccc2c1",
+      "vina_best_score": -10.669,
+      "delta_vs_reference": -0.22799999999999976
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g004",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1cc(C(C)C)c2ccccc2c1",
+      "vina_best_score": -10.398,
+      "delta_vs_reference": 0.04300000000000104
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g000",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2cc(F)ccc2c1",
+      "vina_best_score": -10.24,
+      "delta_vs_reference": 0.2010000000000005
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g002",
+      "status": "SUCCEEDED",
+      "smiles": "CCc1cc2ccccc2cc1/C(C)=C/C(=O)Nc1ccccc1C(=O)O",
+      "vina_best_score": -10.038,
+      "delta_vs_reference": 0.40300000000000047
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g001",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccc(C#N)cc2c1",
+      "vina_best_score": -9.598,
+      "delta_vs_reference": 0.843
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g007",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2c(C#N)cccc2c1",
+      "vina_best_score": -9.514,
+      "delta_vs_reference": 0.9270000000000014
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g003",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2cccc(C(C)C)c2c1",
+      "vina_best_score": -8.539,
+      "delta_vs_reference": 1.902000000000001
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g011",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccc(C(C)C)cc2c1",
+      "vina_best_score": -8.481,
+      "delta_vs_reference": 1.9600000000000009
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g008",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C",
+      "vina_best_score": -8.449,
+      "delta_vs_reference": 1.9920000000000009
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g005",
+      "status": "SUCCEEDED",
+      "smiles": "CCc1ccc2cc(/C(C)=C/C(=O)Nc3ccccc3C(=O)O)ccc2c1",
+      "vina_best_score": -7.801,
+      "delta_vs_reference": 2.6400000000000006
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g006",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C(N)=O",
+      "vina_best_score": -7.587,
+      "delta_vs_reference": 2.854000000000001
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g009",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C(C)C",
+      "vina_best_score": -7.449,
+      "delta_vs_reference": 2.992000000000001
+    }
+  ],
+  "all_candidates": [
+    {
+      "candidate_id": "BIBR1532_55C-g000",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2cc(F)ccc2c1",
+      "vina_best_score": -10.24,
+      "delta_vs_reference": 0.2010000000000005
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g001",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccc(C#N)cc2c1",
+      "vina_best_score": -9.598,
+      "delta_vs_reference": 0.843
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g002",
+      "status": "SUCCEEDED",
+      "smiles": "CCc1cc2ccccc2cc1/C(C)=C/C(=O)Nc1ccccc1C(=O)O",
+      "vina_best_score": -10.038,
+      "delta_vs_reference": 0.40300000000000047
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g003",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2cccc(C(C)C)c2c1",
+      "vina_best_score": -8.539,
+      "delta_vs_reference": 1.902000000000001
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g004",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1cc(C(C)C)c2ccccc2c1",
+      "vina_best_score": -10.398,
+      "delta_vs_reference": 0.04300000000000104
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g005",
+      "status": "SUCCEEDED",
+      "smiles": "CCc1ccc2cc(/C(C)=C/C(=O)Nc3ccccc3C(=O)O)ccc2c1",
+      "vina_best_score": -7.801,
+      "delta_vs_reference": 2.6400000000000006
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g006",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C(N)=O",
+      "vina_best_score": -7.587,
+      "delta_vs_reference": 2.854000000000001
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g007",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2c(C#N)cccc2c1",
+      "vina_best_score": -9.514,
+      "delta_vs_reference": 0.9270000000000014
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g008",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C",
+      "vina_best_score": -8.449,
+      "delta_vs_reference": 1.9920000000000009
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g009",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccccc2c1C(C)C",
+      "vina_best_score": -7.449,
+      "delta_vs_reference": 2.992000000000001
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g010",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1cc(Cl)c2ccccc2c1",
+      "vina_best_score": -10.669,
+      "delta_vs_reference": -0.22799999999999976
+    },
+    {
+      "candidate_id": "BIBR1532_55C-g011",
+      "status": "SUCCEEDED",
+      "smiles": "C/C(=C\\C(=O)Nc1ccccc1C(=O)O)c1ccc2ccc(C(C)C)cc2c1",
+      "vina_best_score": -8.481,
+      "delta_vs_reference": 1.9600000000000009
+    }
+  ],
+  "scope_warning": "Scores rank molecules under one scoring function against one rigid receptor. They are not measured affinities and not evidence of anticancer activity. No candidate here has experimental data of any kind."
+}
