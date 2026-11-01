@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as $3Dmol from '3dmol';
+import { loadStructure as fetchCoordinates } from './TargetStructureThumb';
 import {
   RotateCcw,
   ZoomIn,
@@ -343,12 +344,15 @@ export const MolecularViewer: React.FC<MolecularViewerProps> = ({
       }
 
       const viewer = viewerRef.current;
-      const response = await fetch(protein.structureUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to load PDB ${protein.pdbId} coordinates (${response.status} ${response.statusText})`);
+      // Shared with the sidebar thumbnail: 9Q14 is 1.7 MB, so it is fetched once.
+      let fileData: string;
+      try {
+        fileData = await fetchCoordinates(protein.structureUrl);
+      } catch (e) {
+        throw new Error(
+          `Failed to load PDB ${protein.pdbId} coordinates (${(e as Error).message})`
+        );
       }
-
-      const fileData = await response.text();
       viewer.clear();
       viewer.addModel(fileData, 'cif');
 

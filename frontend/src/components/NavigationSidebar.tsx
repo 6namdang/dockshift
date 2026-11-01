@@ -16,6 +16,7 @@ import {
   Activity
 } from 'lucide-react';
 import { DockShiftLogo } from './DockShiftLogo';
+import { TargetStructureThumb } from './TargetStructureThumb';
 
 export type NavigationTab =
   | 'pipeline'
@@ -126,6 +127,11 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
                 <ExternalLink className="w-2.5 h-2.5" />
               </a>
             </div>
+
+            <TargetStructureThumb
+              url="https://files.rcsb.org/download/9Q14.cif"
+              className="h-[104px] w-full my-2"
+            />
 
             <div className="font-semibold text-xs text-[#E9F0F3] leading-snug">
               Human Telomerase

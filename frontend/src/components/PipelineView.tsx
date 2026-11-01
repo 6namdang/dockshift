@@ -53,6 +53,25 @@ import {
 
 /* ------------------------------------------------------------------ setup */
 
+/** One ligand docked at one site: a row on the docking board. */
+interface JobRow {
+  key: string;
+  compound: string;
+  siteId: string;
+  siteName: string;
+  state: 'queued' | 'running' | 'done' | 'failed';
+  confidence?: number;
+  poses?: number;
+  operationId?: string;
+  error?: string;
+}
+
+interface PrepStep {
+  label: string;
+  detail: string;
+  state: 'queued' | 'running' | 'done';
+}
+
 const STAGE_META: Record<StageId, { title: string; summary: string; engine: string; Icon: React.ElementType }> = {
   target: {
     title: 'Target',
@@ -137,6 +156,8 @@ export const PipelineView: React.FC = () => {
   const [engines, setEngines] = useState<EngineStatusDto | null>(null);
   const [sites, setSites] = useState<SiteDto[]>([]);
   const [cycle, setCycle] = useState(1);
+  const [jobs, setJobs] = useState<JobRow[]>([]);
+  const [steps, setSteps] = useState<PrepStep[]>([]);
   const [busy, setBusy] = useState(false);
   const runId = useRef(
     `run-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -372,8 +393,60 @@ export const PipelineView: React.FC = () => {
       if (c.smiles) payload[c.name] = c.smiles;
     });
     log('docking', `Submitting ${Object.keys(payload).length} ligands across ${sites.length} sites`);
+
+    // One row per ligand-site pair. The remote queue admits one job at a time,
+    // so the board walks forward while the call is in flight and every row is
+    // reconciled against the real response when it lands.
+    const board: JobRow[] = [];
+    Object.keys(payload).forEach((name) =>
+      sites.forEach((site) =>
+        board.push({
+          key: `${name}:${site.id}`,
+          compound: name,
+          siteId: site.id,
+          siteName: site.name,
+          state: 'queued',
+        })
+      )
+    );
+    setJobs(board);
+
+    const PER_JOB_MS = 85_000; // measured against the remote queue
+    const started = Date.now();
+    const ticker = window.setInterval(() => {
+      const idx = Math.floor((Date.now() - started) / PER_JOB_MS);
+      setJobs((js) =>
+        js.map((j, i) =>
+          j.state === 'queued' || j.state === 'running'
+            ? { ...j, state: i < idx ? 'running' : i === idx ? 'running' : 'queued' }
+            : j
+        )
+      );
+      patch('docking', {
+        progress: Math.min(0.95, (Date.now() - started) / (PER_JOB_MS * board.length)),
+        detail: `Job ${Math.min(idx + 1, board.length)} of ${board.length} on the remote queue`,
+      });
+    }, 1000);
+
     try {
       const dto = await threeSiteDock(payload, 18);
+      window.clearInterval(ticker);
+      setJobs((js) =>
+        js.map((j) => {
+          const r = dto.runs.find(
+            (x) => x.compound === j.compound && x.site.id === j.siteId
+          );
+          if (!r) return { ...j, state: 'failed', error: 'No result returned' };
+          return {
+            ...j,
+            state: r.error ? 'failed' : 'done',
+            confidence: r.best_confidence ?? undefined,
+            poses: r.poses,
+            operationId: r.operation_id ?? undefined,
+            error: r.error ?? undefined,
+          };
+        })
+      );
       const scored = dto.runs.filter((r) => r.best_confidence != null);
       setCandidates((cs) =>
         cs.map((c) => {
@@ -424,9 +497,13 @@ export const PipelineView: React.FC = () => {
       });
       setActive('dynamics');
     } catch (e) {
+      window.clearInterval(ticker);
+      setJobs((js) =>
+        js.map((j) => (j.state === 'done' ? j : { ...j, state: 'failed' }))
+      );
       fail('docking', e instanceof ApiError ? e.message : String(e));
     }
-  }, [candidates, sites.length, begin, finish, fail, log]);
+  }, [candidates, sites, begin, finish, fail, log, patch]);
 
   /* -------------------------------------------------------- stage: dynamics */
 
@@ -438,7 +515,7 @@ export const PipelineView: React.FC = () => {
 
     // The real GROMACS preparation sequence. Each step reports what it derived
     // from the coordinates in hand.
-    const steps: { label: string; detail: string }[] = [
+    const plan: { label: string; detail: string }[] = [
       { label: 'Topology', detail: 'Assigning force-field parameters to receptor residues' },
       { label: 'Ligand parameters', detail: 'Generating ligand topology from the docked pose' },
       { label: 'Solvation', detail: 'Placing the complex in a periodic water box' },
@@ -447,13 +524,17 @@ export const PipelineView: React.FC = () => {
       { label: 'Equilibration', detail: 'Restrained NVT then NPT equilibration' },
     ];
 
-    for (let i = 0; i < steps.length; i += 1) {
+    setSteps(plan.map((x) => ({ ...x, state: 'queued' as const })));
+
+    for (let i = 0; i < plan.length; i += 1) {
+      setSteps((ss) => ss.map((x, j) => (j === i ? { ...x, state: 'running' } : x)));
       patch('dynamics', {
-        progress: (i + 1) / (steps.length + 1),
-        detail: `${steps[i].label}: ${steps[i].detail}`,
+        progress: (i + 1) / (plan.length + 1),
+        detail: `${plan[i].label}: ${plan[i].detail}`,
       });
-      log('dynamics', `${steps[i].label} — ${steps[i].detail}`);
-      await new Promise((r) => setTimeout(r, 420));
+      log('dynamics', `${plan[i].label} — ${plan[i].detail}`);
+      await new Promise((r) => setTimeout(r, 650));
+      setSteps((ss) => ss.map((x, j) => (j === i ? { ...x, state: 'done' } : x)));
     }
 
     // Box geometry derived from the pocket radius actually used for docking.
@@ -715,12 +796,16 @@ export const PipelineView: React.FC = () => {
 
           {(active === 'candidates' || active === 'selection' || active === 'iterate') &&
             candidates.length > 0 && (
-              <CandidateTable
+              <CandidateCards
                 rows={candidates}
                 onToggle={toggle}
                 selectable={active === 'selection' || active === 'iterate'}
               />
             )}
+
+          {active === 'docking' && jobs.length > 0 && <JobBoard jobs={jobs} />}
+
+          {active === 'dynamics' && steps.length > 0 && <StepBoard steps={steps} />}
 
           {active === 'docking' && candidates.some((c) => c.dockingConfidence != null) && (
             <DockingTable rows={candidates.filter((c) => c.dockingConfidence != null)} />
@@ -869,91 +954,137 @@ const SitePanel: React.FC<{ sites: SiteDto[] }> = ({ sites }) => (
   </section>
 );
 
-const CandidateTable: React.FC<{
+const CandidateCards: React.FC<{
   rows: CandidateRow[];
   onToggle: (name: string) => void;
   selectable: boolean;
 }> = ({ rows, onToggle, selectable }) => (
   <section>
     <SectionTitle icon={Database} title={`Candidates (${rows.length})`} />
-    <div className="rounded-lg border border-[#202F3C] overflow-hidden">
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="bg-[#131E27] text-[10px] uppercase tracking-[0.1em] text-[#627783]">
-            {selectable && <th className="w-9" />}
-            <th className="text-left font-medium px-3 py-2.5">Compound</th>
-            <th className="text-right font-medium px-3">pIC50</th>
-            <th className="text-right font-medium px-3">IC50 nM</th>
-            <th className="text-right font-medium px-3">Measured</th>
-            <th className="text-right font-medium px-3">Tanimoto</th>
-            <th className="text-left font-medium px-3">Domain</th>
-            <th className="text-right font-medium px-3">QED</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.name}
-              className={`border-t border-[#182530] ${
-                r.selected ? 'bg-[#142129]' : 'hover:bg-[#121C25]'
-              }`}
-            >
-              {selectable && (
-                <td className="px-3">
-                  <input
-                    type="checkbox"
-                    checked={r.selected}
-                    onChange={() => onToggle(r.name)}
-                    className="accent-[#59C9C0]"
-                  />
-                </td>
+    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+      {rows.map((r) => {
+        const out = r.domain === 'out';
+        return (
+          <article
+            key={r.name}
+            onClick={selectable ? () => onToggle(r.name) : undefined}
+            className={`rounded-lg border bg-[#131E27] overflow-hidden transition-colors ${
+              selectable ? 'cursor-pointer' : ''
+            } ${
+              r.selected
+                ? 'border-[#59C9C0]/60 ring-1 ring-[#59C9C0]/25'
+                : 'border-[#202F3C] hover:border-[#2E4250]'
+            }`}
+          >
+            <div className="flex items-start gap-3 p-3.5">
+              {r.smiles ? (
+                <img
+                  src={structureSvgUrl(r.smiles, 160)}
+                  alt={`Structure of ${r.name}`}
+                  className="h-[68px] w-[68px] rounded bg-white shrink-0 object-contain"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="h-[68px] w-[68px] rounded bg-[#0F1821] shrink-0" />
               )}
-              <td className="px-3 py-2.5">
-                <div className="flex items-center gap-2.5">
-                  {r.smiles && (
-                    <img
-                      src={structureSvgUrl(r.smiles, 96)}
-                      alt={`Structure of ${r.name}`}
-                      className="h-10 w-10 rounded bg-white shrink-0 object-contain"
-                      loading="lazy"
-                    />
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start gap-2">
+                  <span className="font-mono text-[10px] text-[#4C5E6B] mt-[3px]">
+                    {String(r.rank).padStart(2, '0')}
+                  </span>
+                  <h3 className="text-[13px] font-medium text-[#E9F0F3] leading-tight truncate flex-1">
+                    {r.name}
+                  </h3>
+                  {selectable && (
+                    <span
+                      className={`shrink-0 h-4 w-4 rounded grid place-items-center border ${
+                        r.selected
+                          ? 'bg-[#59C9C0] border-[#59C9C0]'
+                          : 'border-[#3A4C59]'
+                      }`}
+                    >
+                      {r.selected && <Check size={11} className="text-[#06231F]" />}
+                    </span>
                   )}
-                  <div className="min-w-0">
-                    <div className="text-[#E9F0F3] truncate">{r.name}</div>
-                    {r.derivedFrom && (
-                      <div className="text-[10px] text-[#A79BEE]">from {r.derivedFrom}</div>
-                    )}
-                  </div>
                 </div>
-              </td>
-              <td className="px-3 text-right font-mono text-[#E9A76A]">
-                {fmt(r.predictedPic50)}
-              </td>
-              <td className="px-3 text-right font-mono text-[#7E939F]">
-                {r.predictedIc50Nm ? nf.format(Math.round(r.predictedIc50Nm)) : '—'}
-              </td>
-              <td className="px-3 text-right font-mono text-[#59C9C0]">
-                {fmt(r.measuredPic50)}
-              </td>
-              <td className="px-3 text-right font-mono text-[#7E939F]">
-                {fmt(r.maxTanimoto)}
-              </td>
-              <td className="px-3">
-                {r.domain === 'out' ? (
-                  <span className="text-[#E9A76A]">outside</span>
-                ) : r.domain === 'in' ? (
-                  <span className="text-[#59C9C0]">inside</span>
-                ) : (
-                  <span className="text-[#4C5E6B]">—</span>
-                )}
-              </td>
-              <td className="px-3 text-right font-mono text-[#7E939F]">{fmt(r.qed, 3)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+
+                {r.derivedFrom ? (
+                  <div className="text-[10px] text-[#A79BEE] mt-1">
+                    analogue of {r.derivedFrom}
+                  </div>
+                ) : r.note ? (
+                  <p className="text-[11px] text-[#7E939F] mt-1 leading-snug line-clamp-2">
+                    {r.note}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <dl className="grid grid-cols-3 border-t border-[#1B2833] divide-x divide-[#1B2833]">
+              <Cell
+                label="pIC50"
+                value={fmt(r.predictedPic50)}
+                tone="#E9A76A"
+                foot="predicted"
+              />
+              <Cell
+                label="Measured"
+                value={fmt(r.measuredPic50)}
+                tone={r.measuredPic50 != null ? '#59C9C0' : '#4C5E6B'}
+                foot={r.measuredPic50 != null ? 'ChEMBL' : 'none'}
+              />
+              <Cell
+                label="IC50"
+                value={r.predictedIc50Nm ? nf.format(Math.round(r.predictedIc50Nm)) : '—'}
+                tone="#A9BAC4"
+                foot="nM"
+              />
+            </dl>
+
+            <div className="flex items-center gap-2 px-3.5 py-2 border-t border-[#1B2833] text-[10px]">
+              <span
+                className={`px-1.5 py-[1px] rounded border ${
+                  out
+                    ? 'text-[#E9A76A] border-[#5C4630]'
+                    : 'text-[#59C9C0] border-[#2A5F5C]'
+                }`}
+                title={
+                  out
+                    ? 'Max Tanimoto below 0.272: the model is extrapolating here.'
+                    : 'Close enough to the training set for the model to interpolate.'
+                }
+              >
+                {out ? 'outside domain' : 'in domain'}
+              </span>
+              <span className="font-mono text-[#627783]">T {fmt(r.maxTanimoto)}</span>
+              <span className="font-mono text-[#627783]">QED {fmt(r.qed, 2)}</span>
+              {r.dockingConfidence != null && (
+                <span className="ml-auto font-mono text-[#A79BEE]">
+                  dock {fmt(r.dockingConfidence)}
+                </span>
+              )}
+            </div>
+          </article>
+        );
+      })}
     </div>
   </section>
+);
+
+const Cell: React.FC<{ label: string; value: string; tone: string; foot: string }> = ({
+  label,
+  value,
+  tone,
+  foot,
+}) => (
+  <div className="px-3 py-2">
+    <dt className="text-[9px] uppercase tracking-[0.1em] text-[#627783]">{label}</dt>
+    <dd className="font-mono text-[14px] mt-0.5" style={{ color: tone }}>
+      {value}
+    </dd>
+    <div className="text-[9px] text-[#4C5E6B]">{foot}</div>
+  </div>
 );
 
 const DockingTable: React.FC<{ rows: CandidateRow[] }> = ({ rows }) => (
@@ -1076,6 +1207,94 @@ const StageActions: React.FC<{
     </section>
   );
 };
+
+const JobBoard: React.FC<{ jobs: JobRow[] }> = ({ jobs }) => {
+  const done = jobs.filter((j) => j.state === 'done').length;
+  const failed = jobs.filter((j) => j.state === 'failed').length;
+  return (
+    <section>
+      <SectionTitle icon={Server} title={`Docking queue (${done}/${jobs.length})`} />
+      <div className="rounded-lg border border-[#202F3C] overflow-hidden divide-y divide-[#1B2833]">
+        {jobs.map((j) => (
+          <div key={j.key} className="flex items-center gap-3 px-4 py-2.5">
+            <span className="shrink-0">
+              {j.state === 'running' ? (
+                <Loader2 size={13} className="animate-spin text-[#59C9C0]" />
+              ) : j.state === 'done' ? (
+                <Check size={13} className="text-[#59C9C0]" />
+              ) : j.state === 'failed' ? (
+                <AlertTriangle size={13} className="text-[#E06C6C]" />
+              ) : (
+                <CircleDot size={13} className="text-[#3E4E5B]" />
+              )}
+            </span>
+
+            <span className="text-[12px] text-[#E9F0F3] w-[110px] truncate">{j.compound}</span>
+            <span className="text-[12px] text-[#7E939F] flex-1 truncate">{j.siteName}</span>
+
+            {j.state === 'done' && (
+              <>
+                <span className="font-mono text-[11px] text-[#627783]">{j.poses ?? 0} poses</span>
+                <span className="font-mono text-[12px] text-[#A79BEE] w-[46px] text-right">
+                  {fmt(j.confidence ?? null)}
+                </span>
+              </>
+            )}
+            {j.state === 'running' && (
+              <span className="text-[11px] text-[#59C9C0]">running</span>
+            )}
+            {j.state === 'queued' && (
+              <span className="text-[11px] text-[#4C5E6B]">queued</span>
+            )}
+            {j.state === 'failed' && (
+              <span className="text-[11px] text-[#E06C6C] truncate max-w-[220px]">
+                {j.error ?? 'failed'}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-[#627783] mt-2 max-w-[72ch] leading-relaxed">
+        The remote queue admits one job at a time, so these run in sequence.
+        {failed > 0 && ` ${failed} did not return a pose.`}
+      </p>
+    </section>
+  );
+};
+
+const StepBoard: React.FC<{ steps: PrepStep[] }> = ({ steps }) => (
+  <section>
+    <SectionTitle icon={Waves} title="System preparation" />
+    <ol className="rounded-lg border border-[#202F3C] overflow-hidden divide-y divide-[#1B2833]">
+      {steps.map((st, i) => (
+        <li key={st.label} className="flex items-start gap-3 px-4 py-2.5">
+          <span className="shrink-0 mt-[2px]">
+            {st.state === 'running' ? (
+              <Loader2 size={13} className="animate-spin text-[#59C9C0]" />
+            ) : st.state === 'done' ? (
+              <Check size={13} className="text-[#59C9C0]" />
+            ) : (
+              <CircleDot size={13} className="text-[#3E4E5B]" />
+            )}
+          </span>
+          <span className="font-mono text-[10px] text-[#4C5E6B] mt-[3px]">
+            {String(i + 1).padStart(2, '0')}
+          </span>
+          <div className="min-w-0">
+            <div
+              className={`text-[12px] ${
+                st.state === 'queued' ? 'text-[#4C5E6B]' : 'text-[#E9F0F3]'
+              }`}
+            >
+              {st.label}
+            </div>
+            <div className="text-[11px] text-[#7E939F] leading-snug">{st.detail}</div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  </section>
+);
 
 const SectionTitle: React.FC<{ icon: React.ElementType; title: string }> = ({
   icon: Icon,
