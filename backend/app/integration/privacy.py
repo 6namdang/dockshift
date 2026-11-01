@@ -20,6 +20,7 @@ class Redactor:
     def __init__(self, settings):
         self.secrets = []
         for name in (
+            "nebius_llm_api_key",
             "scientific_models_api_key",
             "openai_api_key",
             "ncbi_api_key",

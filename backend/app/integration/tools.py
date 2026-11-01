@@ -13,7 +13,7 @@ from app.nebius.client import NebiusError, NebiusNotConfiguredError
 from app.nebius.service import _unwrap
 
 from .privacy import Redactor
-from .scienceclaw.adapters.base import ToolUnavailable
+from .scienceclaw.adapters.base import ToolFailed, ToolUnavailable
 from .scienceclaw.adapters.chemistry import RDKitAdapter
 from .scienceclaw.contracts import (
     AgentEvent,
@@ -115,6 +115,9 @@ class DockshiftTools:
         self.observations = {}
         self.redesign = None
         self.cycle = 0
+        self.verified_outputs = {}
+        self.progress = lambda *args: None
+        self.candidate_workflow = None
 
     def require_parents(self, agent):
         from .scienceclaw.runtime.engine import SPECS
@@ -122,6 +125,10 @@ class DockshiftTools:
         parents = next(s.parents for s in SPECS if s.agent_id == agent)
         if agent == "A7":
             return
+        if self.request.workflow == "candidate" and agent == "A3":
+            parents = ("A1",)  # QSAR/ADMET do not require a protein structure.
+        if self.request.workflow == "candidate" and agent == "A5a":
+            parents = ("A1",)  # The candidate identity is checked from real screening output.
         missing = [p for p in parents if self.observations.get(p, {}).get("status") != "SUCCEEDED"]
         if missing:
             raise ToolUnavailable(
@@ -139,7 +146,12 @@ class DockshiftTools:
             code = payload.pop("_error_code", None)
             # Extract only explicitly typed local predictions; remote numbers remain in
             # their original result artifact until a model-specific validator exists.
-            if agent == "A3" and status == "SUCCEEDED" and "qsar" in payload:
+            if (
+                agent == "A3"
+                and status == "SUCCEEDED"
+                and "qsar" in payload
+                and self.request.workflow != "candidate"
+            ):
                 channel = Channel.QSAR_PREDICTION
                 for row in payload["qsar"]["predictions"]:
                     if row.get("predicted_pic50") is not None and not row.get("error"):
@@ -154,6 +166,9 @@ class DockshiftTools:
         except (ToolUnavailable, NebiusNotConfiguredError) as exc:
             status, code = "BLOCKED", getattr(exc, "error_code", "NEBIUS_NOT_CONFIGURED")
             payload, detail = {}, str(exc)
+        except ToolFailed as exc:
+            status, code, payload = "FAILED", exc.error_code, {}
+            detail = exc.detail
         except NebiusError:
             status, code, payload = "FAILED", "NEBIUS_CALL_FAILED", {}
             detail = "Nebius MCP call failed; no scientific result was accepted."
@@ -203,6 +218,15 @@ class DockshiftTools:
         }
 
     async def dispatch(self, agent):
+        if self.request.workflow == "candidate":
+            from .candidate import CandidateWorkflow
+
+            if self.candidate_workflow is None:
+                self.candidate_workflow = CandidateWorkflow(self)
+            return await self.candidate_workflow.dispatch(agent)
+        return await self.dispatch_advanced(agent)
+
+    async def dispatch_advanced(self, agent):
         if agent == "A1":
             issues = TargetIdentity(**self.request.target.model_dump()).check()
             if (
@@ -235,6 +259,24 @@ class DockshiftTools:
             if not ok:
                 raise ValueError(error)
             blocked = [a for a, r in self.observations.items() if r["status"] != "SUCCEEDED"]
+            intact = all(
+                ArtifactRef(**a).verify()
+                for e in self.ledger.events()
+                for a in e.get("outputs", [])
+            )
+            if not intact:
+                raise ValueError("Scientific artifact integrity failed during independent audit")
+            self.verified_outputs["review"] = {
+                "ledger_verified": True,
+                "artifact_hashes_verified": intact,
+                "incomplete_agents": blocked,
+                "redesign": "ABSTAINED",
+                "method": "Deterministic integrity and completeness audit; LLM review is separate",
+                "findings": [
+                    "QSAR and ADMET predictions are distinct from measured target inhibition.",
+                    "No docking or MD evidence can be inferred from ADMET endpoints.",
+                ],
+            }
             return {
                 "upstream_incomplete": blocked,
                 "ledger_verified": True,

@@ -7,11 +7,11 @@ import hashlib
 import uuid
 from dataclasses import asdict, replace
 
+from .nebius_llm import NebiusLLMProvider
 from .privacy import Redactor
 from .scienceclaw.contracts import ArtifactRef
 from .scienceclaw.report.export import acceptance_report, build_bundle
 from .scienceclaw.runtime.engine import SPECS, AgentRuntime, Trace
-from .scienceclaw.runtime.llm import OllamaProvider
 
 # Remove engine-specific claims from the source demo. Actual engines come from receipts.
 SPECS = tuple(
@@ -45,14 +45,22 @@ class DockshiftRuntime(AgentRuntime):
         self.redact = Redactor(science.settings)
         self.trace = Trace(self.out / "agent_execution_trace.jsonl", self.run_id)
         self.provider = provider or (
-            OllamaProvider() if science.request.use_local_llm else DisabledProvider()
+            NebiusLLMProvider(science.settings)
+            if science.request.use_nebius_llm
+            else DisabledProvider()
         )
         self.probe = self.provider.probe()
         self.registry, self.latest = {}, {}
         self.results, self.handoffs, self.redesigns = [], [], []
         self.max_cycles = 0
         self.methods = {s.agent_id: self.bind(s.agent_id) for s in SPECS}
-        for spec in SPECS:
+        self.specs = SPECS
+        if science.request.workflow == "candidate":
+            self.specs = tuple(
+                replace(s, parents=("A1",), tool="screen_candidate") if s.agent_id == "A3" else s
+                for s in SPECS
+            )
+        for spec in self.specs:
             self.trace.emit("agent_initialized", spec.agent_id, specification=asdict(spec))
 
     def write(self, name, data):
@@ -65,8 +73,10 @@ class DockshiftRuntime(AgentRuntime):
         return execute
 
     def run(self):
-        for spec in SPECS:
-            self.invoke(spec, 0)
+        for spec in self.specs:
+            self.science.progress(spec.agent_id, "RUNNING")
+            result = self.invoke(spec, 0)
+            self.science.progress(spec.agent_id, result["scientific_status"], result["detail"])
         # Preserve A7's structured feedback without automatically starting more compute.
         decision = self.latest["A7"]["decision"]
         self.redesigns.append(
@@ -118,6 +128,13 @@ class DockshiftRuntime(AgentRuntime):
                 ),
                 "llm_agents_invoked": sum(r["llm_inference_calls"] > 0 for r in self.results),
                 "compute_enabled": self.science.settings.agent_compute_enabled,
+                "workflow": self.science.request.workflow,
+                "candidate_screening_status": "COMPLETED"
+                if self.science.verified_outputs.get("admet")
+                else "BLOCKED",
+                "candidate_name": self.science.request.candidate_name,
+                "outputs": self.science.verified_outputs,
+                "review_provider": "nebius" if self.science.request.use_nebius_llm else None,
             }
         )
         bundle = self.redact(bundle)
@@ -128,7 +145,7 @@ class DockshiftRuntime(AgentRuntime):
         manifest = {
             str(p.relative_to(self.out)): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in self.out.iterdir()
-            if p.is_file()
+            if p.is_file() and p.name != "progress.json"
         }
         self.write("manifest.json", manifest)
         return bundle

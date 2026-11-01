@@ -62,6 +62,7 @@ class Channel(str, Enum):
 
     BEETLE_EXPERIMENTAL = "beetle_experimental"
     QSAR_PREDICTION = "qsar_prediction"
+    ADMET_PREDICTION = "admet_prediction"
     BEETLE_DOCKING = "beetle_docking"
     HUMAN_DOCKING = "human_docking"
     PREDICTED_COMPLEX = "predicted_complex"

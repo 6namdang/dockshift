@@ -63,6 +63,15 @@ class Settings(BaseSettings):
     # --- Integrated scientific runtime ---------------------------------------
     agent_artifact_root: Path = Path(".dockshift-agent-runs")
     agent_compute_enabled: bool = False
+    # Narrow authorization for one-molecule ADMET; never authorizes docking/MD.
+    agent_admet_enabled: bool = False
+    agent_llm_enabled: bool = False
+    nebius_llm_api_key: SecretStr | None = None
+    nebius_llm_base_url: str = "https://api.tokenfactory.nebius.com/v1"
+    nebius_llm_model: str | None = None
+    agent_remote_wait_seconds: float = Field(60, ge=0, le=600)
+    agent_poll_interval_seconds: float = Field(3, ge=0.1, le=30)
+    agent_max_artifact_bytes: int = Field(20_000_000, ge=1024, le=100_000_000)
     # Optional exact tool name, configured only after reviewing Nebius discovery.
     agent_nebius_binder_tool: str | None = None
 

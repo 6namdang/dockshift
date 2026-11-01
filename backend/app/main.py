@@ -54,7 +54,10 @@ def create_app() -> FastAPI:
                 app.state.structural_service,
                 app.state.nebius_service,
             )
-            yield
+            try:
+                yield
+            finally:
+                await app.state.integration_service.close()
 
     app = FastAPI(title=settings.app_name, version="0.2.0", lifespan=lifespan)
     app.add_middleware(

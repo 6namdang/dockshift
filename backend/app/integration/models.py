@@ -33,6 +33,12 @@ class RemoteJob(StrictModel):
 
 
 class RunRequest(StrictModel):
+    workflow: Literal["advanced", "candidate"] = "advanced"
+    candidate_name: str = Field("Candidate", min_length=1, max_length=200)
+    remote_admet: bool = True
+    docking: bool = False
+    use_nebius_llm: bool = False
+    resume_operations: dict[str, str] = Field(default_factory=dict)
     target: Target = Field(default_factory=Target)
     compounds: list[str] = Field(default_factory=list, max_length=12)
     literature_query: str | None = Field(None, min_length=1, max_length=1000)

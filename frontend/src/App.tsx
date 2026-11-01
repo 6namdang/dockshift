@@ -333,7 +333,7 @@ export default function App() {
         )}
 
         {/* 5. LITERATURE TAB */}
-        {activeTab === 'agents' && <AgentRunsView />}
+        {activeTab === 'agents' && <AgentRunsView candidate={candidates.find(c => c.id === selectedCandidateId)} />}
 
         {activeTab === 'literature' && (
           <div className="flex-1 h-full">
